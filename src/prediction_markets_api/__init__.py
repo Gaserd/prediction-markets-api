@@ -1,0 +1,23 @@
+"""Unified Python client for prediction markets."""
+
+from prediction_markets_api.adapters.polymarket import PolymarketClient
+from prediction_markets_api.models.base import (
+    Market,
+    OrderBook,
+    OrderLevel,
+    Outcome,
+    Price,
+    Trade,
+)
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "PolymarketClient",
+    "Market",
+    "Outcome",
+    "OrderBook",
+    "OrderLevel",
+    "Price",
+    "Trade",
+]

@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "id": "trade_1",
+      "market": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "side": "BUY",
+      "price": "0.65",
+      "size": "100.00",
+      "timestamp": "2026-02-05T15:30:00Z"
+    },
+    {
+      "id": "trade_2",
+      "market": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "side": "SELL",
+      "price": "0.64",
+      "size": "150.00",
+      "timestamp": "2026-02-05T15:28:00Z"
+    }
+  ],
+  "next_cursor": null
+}
