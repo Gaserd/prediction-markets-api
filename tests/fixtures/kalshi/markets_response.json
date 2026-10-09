@@ -1,0 +1,331 @@
+{
+  "cursor": null,
+  "markets": [
+    {
+      "can_close_early": true,
+      "close_time": "2026-10-15T19:00:00Z",
+      "created_time": "2026-10-09T13:58:18.923605Z",
+      "custom_strike": {
+        "Associated Events": "KXDIMAYORGAME-26OCT09OCLLA,KXLALIGAGAME-26OCT10BARGET,KXLIGUE1GAME-26OCT10PSGMAN,KXUCLGAME-26OCT13GALBAR,KXUCLGAME-26OCT13VIKBMU",
+        "Associated Market Sides": "yes,yes,yes,yes,yes",
+        "Associated Markets": "KXDIMAYORGAME-26OCT09OCLLA-OC,KXLALIGAGAME-26OCT10BARGET-BAR,KXLIGUE1GAME-26OCT10PSGMAN-PSG,KXUCLGAME-26OCT13GALBAR-BAR,KXUCLGAME-26OCT13VIKBMU-BMU",
+        "Multivariate Event Ticker": "KXMVECROSSCATEGORY-S202635994402BC3"
+      },
+      "event_ticker": "KXMVECROSSCATEGORY-S202635994402BC3",
+      "exchange_index": 1,
+      "expected_expiration_time": "2026-10-14T01:00:00Z",
+      "expiration_time": "2026-10-15T19:00:00Z",
+      "expiration_value": "",
+      "is_provisional": true,
+      "last_price_dollars": "0.0000",
+      "latest_expiration_time": "2026-10-15T19:00:00Z",
+      "market_type": "binary",
+      "mve_collection_ticker": "KXMVECROSSCATEGORY-R",
+      "mve_selected_legs": [
+        {
+          "event_ticker": "KXDIMAYORGAME-26OCT09OCLLA",
+          "market_ticker": "KXDIMAYORGAME-26OCT09OCLLA-OC",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXLALIGAGAME-26OCT10BARGET",
+          "market_ticker": "KXLALIGAGAME-26OCT10BARGET-BAR",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXLIGUE1GAME-26OCT10PSGMAN",
+          "market_ticker": "KXLIGUE1GAME-26OCT10PSGMAN-PSG",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXUCLGAME-26OCT13GALBAR",
+          "market_ticker": "KXUCLGAME-26OCT13GALBAR-BAR",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXUCLGAME-26OCT13VIKBMU",
+          "market_ticker": "KXUCLGAME-26OCT13VIKBMU-BMU",
+          "side": "yes"
+        }
+      ],
+      "no_ask_dollars": "1.0000",
+      "no_bid_dollars": "1.0000",
+      "no_sub_title": "yes Once Caldas,yes Barcelona,yes PSG,yes Barcelona,yes Bayern Munich",
+      "notional_value_dollars": "1.0000",
+      "open_interest_fp": "0.00",
+      "open_time": "2026-10-09T13:58:18Z",
+      "previous_price_dollars": "0.0000",
+      "previous_yes_ask_dollars": "0.0000",
+      "previous_yes_bid_dollars": "0.0000",
+      "price_level_structure": "center_deci_edge_centi_cent",
+      "price_ranges": [
+        {
+          "end": "0.0100",
+          "start": "0.0000",
+          "step": "0.0001"
+        },
+        {
+          "end": "0.9900",
+          "start": "0.0100",
+          "step": "0.0010"
+        },
+        {
+          "end": "1.0000",
+          "start": "0.9900",
+          "step": "0.0001"
+        }
+      ],
+      "result": "",
+      "rules_primary": "",
+      "rules_secondary": "Kalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+      "settlement_bounds_type": "default",
+      "settlement_timer_seconds": 5,
+      "status": "active",
+      "strike_type": "custom",
+      "ticker": "KXMVECROSSCATEGORY-S202635994402BC3-DE983D4B6EB",
+      "title": "yes Once Caldas,yes Barcelona,yes PSG,yes Barcelona,yes Bayern Munich",
+      "updated_time": "2026-10-09T13:58:18.923636Z",
+      "volume_24h_fp": "0.00",
+      "volume_fp": "0.00",
+      "yes_ask_dollars": "0.0000",
+      "yes_ask_size_fp": "0.00",
+      "yes_bid_dollars": "0.0000",
+      "yes_bid_size_fp": "0.00",
+      "yes_sub_title": "yes Once Caldas,yes Barcelona,yes PSG,yes Barcelona,yes Bayern Munich"
+    },
+    {
+      "can_close_early": true,
+      "close_time": "2026-10-11T18:00:00Z",
+      "created_time": "2026-10-09T13:58:18.913497Z",
+      "custom_strike": {
+        "Associated Events": "KXDENSUPERLIGAGAME-26OCT09NJAOBK,KXEREDIVISIEGAME-26OCT09PSVHEE,KXSAUDIPLGAME-26OCT09FATAAS,KXSUPERLIGGAME-26OCT09GALKAS",
+        "Associated Market Sides": "yes,yes,yes,yes",
+        "Associated Markets": "KXDENSUPERLIGAGAME-26OCT09NJAOBK-NJA,KXEREDIVISIEGAME-26OCT09PSVHEE-PSV,KXSAUDIPLGAME-26OCT09FATAAS-AAS,KXSUPERLIGGAME-26OCT09GALKAS-GAL",
+        "Multivariate Event Ticker": "KXMVECROSSCATEGORY-S2026A56CA1C9DCE"
+      },
+      "event_ticker": "KXMVECROSSCATEGORY-S2026A56CA1C9DCE",
+      "exchange_index": 1,
+      "expected_expiration_time": "2026-10-10T00:00:00Z",
+      "expiration_time": "2026-10-11T18:00:00Z",
+      "expiration_value": "",
+      "is_provisional": true,
+      "last_price_dollars": "0.0000",
+      "latest_expiration_time": "2026-10-11T18:00:00Z",
+      "market_type": "binary",
+      "mve_collection_ticker": "KXMVECROSSCATEGORY-R",
+      "mve_selected_legs": [
+        {
+          "event_ticker": "KXDENSUPERLIGAGAME-26OCT09NJAOBK",
+          "market_ticker": "KXDENSUPERLIGAGAME-26OCT09NJAOBK-NJA",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXEREDIVISIEGAME-26OCT09PSVHEE",
+          "market_ticker": "KXEREDIVISIEGAME-26OCT09PSVHEE-PSV",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXSAUDIPLGAME-26OCT09FATAAS",
+          "market_ticker": "KXSAUDIPLGAME-26OCT09FATAAS-AAS",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXSUPERLIGGAME-26OCT09GALKAS",
+          "market_ticker": "KXSUPERLIGGAME-26OCT09GALKAS-GAL",
+          "side": "yes"
+        }
+      ],
+      "no_ask_dollars": "1.0000",
+      "no_bid_dollars": "1.0000",
+      "no_sub_title": "yes Nordsjaelland,yes Eindhoven,yes Al Ahli Saudi,yes Galatasaray",
+      "notional_value_dollars": "1.0000",
+      "open_interest_fp": "0.00",
+      "open_time": "2026-10-09T13:58:18Z",
+      "previous_price_dollars": "0.0000",
+      "previous_yes_ask_dollars": "0.0000",
+      "previous_yes_bid_dollars": "0.0000",
+      "price_level_structure": "center_deci_edge_centi_cent",
+      "price_ranges": [
+        {
+          "end": "0.0100",
+          "start": "0.0000",
+          "step": "0.0001"
+        },
+        {
+          "end": "0.9900",
+          "start": "0.0100",
+          "step": "0.0010"
+        },
+        {
+          "end": "1.0000",
+          "start": "0.9900",
+          "step": "0.0001"
+        }
+      ],
+      "result": "",
+      "rules_primary": "",
+      "rules_secondary": "Kalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+      "settlement_bounds_type": "default",
+      "settlement_timer_seconds": 5,
+      "status": "active",
+      "strike_type": "custom",
+      "ticker": "KXMVECROSSCATEGORY-S2026A56CA1C9DCE-694BFE55B80",
+      "title": "yes Nordsjaelland,yes Eindhoven,yes Al Ahli Saudi,yes Galatasaray",
+      "updated_time": "2026-10-09T13:58:18.913525Z",
+      "volume_24h_fp": "0.00",
+      "volume_fp": "0.00",
+      "yes_ask_dollars": "0.0000",
+      "yes_ask_size_fp": "0.00",
+      "yes_bid_dollars": "0.0000",
+      "yes_bid_size_fp": "0.00",
+      "yes_sub_title": "yes Nordsjaelland,yes Eindhoven,yes Al Ahli Saudi,yes Galatasaray"
+    },
+    {
+      "can_close_early": true,
+      "close_time": "2026-10-12T19:00:00Z",
+      "created_time": "2026-10-09T13:58:18.877878Z",
+      "custom_strike": {
+        "Associated Events": "KXBUNDESLIGATOTAL-26OCT09BVBSVW,KXBUNDESLIGATOTAL-26OCT10FCABMU,KXBUNDESLIGATOTAL-26OCT10M05LEV,KXBUNDESLIGATOTAL-26OCT10PADVFB,KXBUNDESLIGATOTAL-26OCT10RBLSGE,KXBUNDESLIGATOTAL-26OCT10TSGHSV,KXBUNDESLIGATOTAL-26OCT10UNISVE,KXEPLTOTAL-26OCT10ARSLEE,KXLALIGATOTAL-26OCT09MCFESP,KXLALIGATOTAL-26OCT10ALAATM,KXLALIGATOTAL-26OCT10BARGET,KXLALIGATOTAL-26OCT10RMAVIL,KXLALIGATOTAL-26OCT10RVCATH,KXSERIEATOTAL-26OCT10GENFIO,KXSERIEATOTAL-26OCT10INTPAR,KXSERIEATOTAL-26OCT10NAPFRO",
+        "Associated Market Sides": "yes,yes,yes,yes,yes,yes,yes,yes,yes,yes,yes,yes,yes,yes,yes,yes",
+        "Associated Markets": "KXBUNDESLIGATOTAL-26OCT09BVBSVW-2,KXBUNDESLIGATOTAL-26OCT10FCABMU-3,KXBUNDESLIGATOTAL-26OCT10M05LEV-2,KXBUNDESLIGATOTAL-26OCT10PADVFB-2,KXBUNDESLIGATOTAL-26OCT10RBLSGE-2,KXBUNDESLIGATOTAL-26OCT10TSGHSV-2,KXBUNDESLIGATOTAL-26OCT10UNISVE-2,KXEPLTOTAL-26OCT10ARSLEE-2,KXLALIGATOTAL-26OCT09MCFESP-2,KXLALIGATOTAL-26OCT10ALAATM-2,KXLALIGATOTAL-26OCT10BARGET-2,KXLALIGATOTAL-26OCT10RMAVIL-2,KXLALIGATOTAL-26OCT10RVCATH-2,KXSERIEATOTAL-26OCT10GENFIO-2,KXSERIEATOTAL-26OCT10INTPAR-2,KXSERIEATOTAL-26OCT10NAPFRO-2",
+        "Multivariate Event Ticker": "KXMVECROSSCATEGORY-S2026077885823A7"
+      },
+      "event_ticker": "KXMVECROSSCATEGORY-S2026077885823A7",
+      "exchange_index": 1,
+      "expected_expiration_time": "2026-10-11T01:00:00Z",
+      "expiration_time": "2026-10-12T19:00:00Z",
+      "expiration_value": "",
+      "is_provisional": true,
+      "last_price_dollars": "0.0000",
+      "latest_expiration_time": "2026-10-12T19:00:00Z",
+      "market_type": "binary",
+      "mve_collection_ticker": "KXMVECROSSCATEGORY-R",
+      "mve_selected_legs": [
+        {
+          "event_ticker": "KXBUNDESLIGATOTAL-26OCT09BVBSVW",
+          "market_ticker": "KXBUNDESLIGATOTAL-26OCT09BVBSVW-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXBUNDESLIGATOTAL-26OCT10FCABMU",
+          "market_ticker": "KXBUNDESLIGATOTAL-26OCT10FCABMU-3",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXBUNDESLIGATOTAL-26OCT10M05LEV",
+          "market_ticker": "KXBUNDESLIGATOTAL-26OCT10M05LEV-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXBUNDESLIGATOTAL-26OCT10PADVFB",
+          "market_ticker": "KXBUNDESLIGATOTAL-26OCT10PADVFB-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXBUNDESLIGATOTAL-26OCT10RBLSGE",
+          "market_ticker": "KXBUNDESLIGATOTAL-26OCT10RBLSGE-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXBUNDESLIGATOTAL-26OCT10TSGHSV",
+          "market_ticker": "KXBUNDESLIGATOTAL-26OCT10TSGHSV-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXBUNDESLIGATOTAL-26OCT10UNISVE",
+          "market_ticker": "KXBUNDESLIGATOTAL-26OCT10UNISVE-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXEPLTOTAL-26OCT10ARSLEE",
+          "market_ticker": "KXEPLTOTAL-26OCT10ARSLEE-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXLALIGATOTAL-26OCT09MCFESP",
+          "market_ticker": "KXLALIGATOTAL-26OCT09MCFESP-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXLALIGATOTAL-26OCT10ALAATM",
+          "market_ticker": "KXLALIGATOTAL-26OCT10ALAATM-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXLALIGATOTAL-26OCT10BARGET",
+          "market_ticker": "KXLALIGATOTAL-26OCT10BARGET-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXLALIGATOTAL-26OCT10RMAVIL",
+          "market_ticker": "KXLALIGATOTAL-26OCT10RMAVIL-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXLALIGATOTAL-26OCT10RVCATH",
+          "market_ticker": "KXLALIGATOTAL-26OCT10RVCATH-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXSERIEATOTAL-26OCT10GENFIO",
+          "market_ticker": "KXSERIEATOTAL-26OCT10GENFIO-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXSERIEATOTAL-26OCT10INTPAR",
+          "market_ticker": "KXSERIEATOTAL-26OCT10INTPAR-2",
+          "side": "yes"
+        },
+        {
+          "event_ticker": "KXSERIEATOTAL-26OCT10NAPFRO",
+          "market_ticker": "KXSERIEATOTAL-26OCT10NAPFRO-2",
+          "side": "yes"
+        }
+      ],
+      "no_ask_dollars": "1.0000",
+      "no_bid_dollars": "1.0000",
+      "no_sub_title": "yes Over 1.5 goals scored,yes Over 2.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored",
+      "notional_value_dollars": "1.0000",
+      "open_interest_fp": "0.00",
+      "open_time": "2026-10-09T13:58:18Z",
+      "previous_price_dollars": "0.0000",
+      "previous_yes_ask_dollars": "0.0000",
+      "previous_yes_bid_dollars": "0.0000",
+      "price_level_structure": "center_deci_edge_centi_cent",
+      "price_ranges": [
+        {
+          "end": "0.0100",
+          "start": "0.0000",
+          "step": "0.0001"
+        },
+        {
+          "end": "0.9900",
+          "start": "0.0100",
+          "step": "0.0010"
+        },
+        {
+          "end": "1.0000",
+          "start": "0.9900",
+          "step": "0.0001"
+        }
+      ],
+      "result": "",
+      "rules_primary": "",
+      "rules_secondary": "Kalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+      "settlement_bounds_type": "default",
+      "settlement_timer_seconds": 5,
+      "status": "active",
+      "strike_type": "custom",
+      "ticker": "KXMVECROSSCATEGORY-S2026077885823A7-FA9F8F4AFC9",
+      "title": "yes Over 1.5 goals scored,yes Over 2.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored",
+      "updated_time": "2026-10-09T13:58:18.87791Z",
+      "volume_24h_fp": "0.00",
+      "volume_fp": "0.00",
+      "yes_ask_dollars": "0.0000",
+      "yes_ask_size_fp": "0.00",
+      "yes_bid_dollars": "0.0000",
+      "yes_bid_size_fp": "0.00",
+      "yes_sub_title": "yes Over 1.5 goals scored,yes Over 2.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored,yes Over 1.5 goals scored"
+    }
+  ]
+}

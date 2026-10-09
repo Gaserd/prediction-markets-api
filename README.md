@@ -168,11 +168,24 @@ export POLYMARKET_WALLET_ADDRESS="0x..."
 
 ## Supported Venues
 
-| Venue      | Status       | Read | Trade |
-|------------|--------------|------|-------|
-| Polymarket | ✅ Available | ✅   | 🚧    |
-| Kalshi     | 🚧 Planned   | —    | —     |
-| Limitless  | 🚧 Planned   | —    | —     |
+**Note**: Signup links are referral links; the project receives a reward when you sign up.
+
+| Venue | Chain | Status | Read | Trade | API Key (Read) | API Key (Trade) | Geo Restrictions | Signup Link |
+|-------|-------|--------|------|-------|----------------|-----------------|------------------|-------------|
+| Polymarket | Polygon | ✅ Implemented | ✅ | — | No | Yes | US blocked | [Link](https://polymarket.com) |
+| Kalshi | None | ✅ Implemented | ✅ | — | No | Yes | US only | [Link](https://kalshi.com) |
+| Limitless | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://limitless.exchange) |
+| Hyperliquid Outcomes (HIP-4) | Hyperliquid | 🚧 Planned | — | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
+| Predict.fun | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://predict.fun) |
+| Opinion | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://opinion.finance) |
+| Pascal | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://pascal.money) |
+| SX Bet | Arbitrum | 🚧 Planned | — | — | No | Yes | None | [Link](https://sx.bet) |
+| Azuro/Bookmaker.xyz | Polygon | 🚧 Planned | — | — | No | Yes | None | [Link](https://azuro.org) |
+| Jupiter Prediction | Solana | 🚧 Planned | — | — | No | Yes | None | [Link](https://jup.ag) |
+| Polymarket US | Unknown | 🚧 Planned | — | — | No | Yes | US only | [Link](https://polymarket.com) |
+| Novig | None | 🚧 Planned | — | — | No | Yes | None | [Link](https://novig.com) |
+| World | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://world.org) |
+| BetDEX | Solana | 🚧 Planned | — | — | No | Yes | None | [Link](https://betdex.com) |
 
 > **Trading Interface**: This release includes a designed trading interface with `place_order()`, but actual order execution is a stub. Full trading support coming in the next release.
 

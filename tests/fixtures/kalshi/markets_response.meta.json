@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-09T13:58:50.366852+00:00",
+  "method": "GET",
+  "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+  "params": {
+    "limit": 100
+  },
+  "note": "Filtered for simple binary markets (non-multivariate)",
+  "description": "Sample markets from Kalshi"
+}
