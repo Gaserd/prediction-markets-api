@@ -1,38 +1,38 @@
 {
-  "market": "0xa467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7",
-  "asset_id": "32338220190071351435772801779725302244575775216413325951443816017994629993401",
-  "timestamp": "1791552578405",
-  "hash": "60aa6852f4f10b8b25aaa2d9609bd1de32fb841a",
+  "market": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+  "asset_id": "54533043819946592547517511176940999955633860128497669742211153063842200957669",
+  "timestamp": "1791552912297",
+  "hash": "e9f5e6de7c8eb6b9eaeecdc0f74fceaa57c8d02a",
   "bids": [
     {
       "price": "0.001",
-      "size": "12568631.09"
+      "size": "706063"
     },
     {
       "price": "0.002",
-      "size": "2275830.27"
+      "size": "160"
     },
     {
       "price": "0.003",
-      "size": "1417114.55"
+      "size": "5306.66"
     }
   ],
   "asks": [
     {
       "price": "0.999",
-      "size": "2178810.5"
+      "size": "6109717.41"
     },
     {
       "price": "0.998",
-      "size": "376971.49"
+      "size": "4002660"
     },
     {
       "price": "0.997",
-      "size": "72189.31"
+      "size": "4011781.55"
     }
   ],
   "min_order_size": "5",
   "tick_size": "0.001",
-  "neg_risk": false,
-  "last_trade_price": "0.969"
+  "neg_risk": true,
+  "last_trade_price": "0.845"
 }

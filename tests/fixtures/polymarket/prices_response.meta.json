@@ -1,12 +1,19 @@
 {
-  "recorded_at": "2026-10-09T13:28:00+00:00",
+  "recorded_at": "2026-10-09T13:35:17.701312+00:00",
+  "token_id": "54533043819946592547517511176940999955633860128497669742211153063842200957669",
   "request": {
     "method": "GET",
     "url": "https://clob.polymarket.com/price",
     "params": {
-      "token_id": "32338220190071351435772801779725302244575775216413325951443816017994629993401",
+      "token_id": "54533043819946592547517511176940999955633860128497669742211153063842200957669",
       "side": "SELL"
     }
   },
-  "description": "Real response from Polymarket CLOB API /price endpoint (singular). Same token as orderbook_response. Query side=SELL to get ask price (what user pays to BUY). Note: Polymarket 'side' is book side, not user action - inverted in our adapter."
+  "description": "Real response from Polymarket CLOB API /price endpoint. Recorded back-to-back with orderbook_response from same token at same time. Query side=SELL to get ask price (what user pays to BUY). Returns: 0.155. Note: Polymarket 'side' is book side, not user action - inverted in our adapter. Price algorithm may use depth/recent trades, not just top of book.",
+  "market": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+  "companion_request": {
+    "side": "BUY",
+    "returned_price": "0.154",
+    "note": "SELL side (bid) recorded but not in this fixture. get_price(SELL) queries side=BUY."
+  }
 }

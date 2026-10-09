@@ -65,7 +65,7 @@ async def test_get_market(markets_response, respx_mock):
 @pytest.mark.asyncio
 async def test_get_order_book(orderbook_response, respx_mock):
     """Test getting order book with mocked response."""
-    outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+    outcome_id = "54533043819946592547517511176940999955633860128497669742211153063842200957669"
 
     respx_mock.get("https://clob.polymarket.com/book").mock(
         return_value=httpx.Response(200, json=orderbook_response)
@@ -80,13 +80,13 @@ async def test_get_order_book(orderbook_response, respx_mock):
 
     # Bids are sorted descending (highest first)
     assert order_book.bids[0].price == Decimal("0.003")
-    assert order_book.bids[0].size == Decimal("1417114.55")
+    assert order_book.bids[0].size == Decimal("5306.66")
 
     # Asks are sorted ascending (lowest first)
     assert order_book.asks[0].price == Decimal("0.997")
-    assert order_book.asks[0].size == Decimal("72189.31")
+    assert order_book.asks[0].size == Decimal("4011781.55")
 
-    assert order_book.last_trade_price == Decimal("0.969")
+    assert order_book.last_trade_price == Decimal("0.845")
     assert order_book.min_order_size == Decimal("5")
     assert order_book.tick_size == Decimal("0.001")
     assert order_book.currency == Currency.USDC
@@ -97,7 +97,7 @@ async def test_get_order_book(orderbook_response, respx_mock):
 @pytest.mark.asyncio
 async def test_get_price(prices_response, respx_mock):
     """Test getting best executable price with side inversion."""
-    outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+    outcome_id = "54533043819946592547517511176940999955633860128497669742211153063842200957669"
 
     # User wants to BUY, so we query side=SELL (ask side) from CLOB
     respx_mock.get("https://clob.polymarket.com/price").mock(
@@ -109,7 +109,7 @@ async def test_get_price(prices_response, respx_mock):
 
     assert buy_price.outcome_id == outcome_id
     assert buy_price.side == OrderSide.BUY
-    assert buy_price.price == Decimal("0.031")
+    assert buy_price.price == Decimal("0.155")
     assert buy_price.currency == Currency.USDC
 
     # Verify the request was made with inverted side
@@ -316,3 +316,42 @@ async def test_get_price_side_inversion(respx_mock):
     requests = respx_mock.calls
     assert len(requests) == 1
     assert "side=BUY" in requests[0].request.url.query.decode()
+
+
+@pytest.mark.asyncio
+async def test_fixture_consistency():
+    """Test that fixtures are recorded from the same token at the same time.
+
+    Verifies metadata consistency: both order book and price fixtures should
+    reference the same token_id and recorded_at timestamp.
+
+    Note: Polymarket's /price endpoint may not exactly match the raw order book
+    top of book, as it uses their pricing algorithm which considers depth and
+    recent trades. This test verifies our fixtures are consistently recorded,
+    not that we reimplement Polymarket's pricing.
+    """
+    import json
+    from pathlib import Path
+
+    fixtures_dir = Path(__file__).parent / "fixtures" / "polymarket"
+
+    # Load metadata
+    with open(fixtures_dir / "orderbook_response.meta.json") as f:
+        book_meta = json.load(f)
+
+    with open(fixtures_dir / "prices_response.meta.json") as f:
+        price_meta = json.load(f)
+
+    # Verify same token
+    assert book_meta["token_id"] == price_meta["token_id"], "Fixtures must be from the same token"
+
+    # Verify recorded at same time
+    assert book_meta["recorded_at"] == price_meta["recorded_at"], (
+        "Fixtures must be recorded at the same time"
+    )
+
+    # Document the token for test readability
+    token_id = book_meta["token_id"]
+    assert (
+        token_id == "54533043819946592547517511176940999955633860128497669742211153063842200957669"
+    )
