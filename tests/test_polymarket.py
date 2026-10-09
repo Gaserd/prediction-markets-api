@@ -97,7 +97,7 @@ async def test_get_price(prices_response, respx_mock):
     """Test getting best executable price."""
     outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
 
-    respx_mock.get("https://clob.polymarket.com/prices").mock(
+    respx_mock.get("https://clob.polymarket.com/price").mock(
         return_value=httpx.Response(200, json=prices_response)
     )
 

@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-09T13:24:49.588545+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://gamma-api.polymarket.com/markets/keyset",
+    "params": {
+      "limit": 2,
+      "closed": false
+    }
+  },
+  "description": "Real response from Polymarket Gamma API /markets/keyset endpoint. Trimmed to 2 markets for test fixtures."
+}

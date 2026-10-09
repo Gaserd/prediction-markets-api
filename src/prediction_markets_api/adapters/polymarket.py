@@ -184,6 +184,8 @@ class PolymarketClient(BaseClient):
     async def get_price(self, outcome_id: str, side: OrderSide) -> Price:
         """Get best executable price for an outcome and side.
 
+        Uses singular /price endpoint for single token queries.
+
         Args:
             outcome_id: Polymarket token_id
             side: OrderSide.BUY or OrderSide.SELL
@@ -194,10 +196,10 @@ class PolymarketClient(BaseClient):
         Raises:
             ValueError: If outcome not found or no liquidity
         """
-        url = f"{self.CLOB_API_BASE}/prices"
+        url = f"{self.CLOB_API_BASE}/price"
         params = {
-            "token_ids": outcome_id,
-            "sides": side.value,
+            "token_id": outcome_id,
+            "side": side.value,
         }
 
         try:
@@ -207,14 +209,7 @@ class PolymarketClient(BaseClient):
         except (httpx.HTTPError, ValueError) as e:
             raise ValueError(f"Failed to fetch price for {outcome_id}: {e}") from e
 
-        if outcome_id not in data:
-            raise ValueError(f"No price data for outcome {outcome_id}")
-
-        side_prices = data[outcome_id]
-        if side.value not in side_prices:
-            raise ValueError(f"No {side.value} price for outcome {outcome_id}")
-
-        raw_price = side_prices[side.value]
+        raw_price = data.get("price")
         if raw_price is None:
             raise ValueError(f"No liquidity for {side.value} on outcome {outcome_id}")
 

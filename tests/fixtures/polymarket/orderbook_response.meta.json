@@ -1,0 +1,11 @@
+{
+  "recorded_at": "2026-10-09T13:24:49.588545+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://clob.polymarket.com/book",
+    "params": {
+      "token_id": "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+    }
+  },
+  "description": "Real response from Polymarket CLOB API /book endpoint. Trimmed to first 3 bids and 3 asks."
+}
