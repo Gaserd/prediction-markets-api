@@ -1,0 +1,47 @@
+{
+  "markets": [
+    {
+      "id": "559651",
+      "question": "Xi Jinping out before 2027?",
+      "conditionId": "0xa467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7",
+      "slug": "xi-jinping-out-before-2027",
+      "endDate": "2027-01-01T04:59:00Z",
+      "liquidity": "607943.92913",
+      "startDate": "2025-07-03T20:37:00.228Z",
+      "description": "This market will resolve to \"Yes\" if China's General Secretary Xi Jinping is removed from power before 2027.",
+      "outcomes": "[\"Yes\", \"No\"]",
+      "outcomePrices": "[\"0.0305\", \"0.9695\"]",
+      "volume": "14667546.324205998",
+      "active": true,
+      "closed": false,
+      "createdAt": "2025-07-03T20:25:56.889606Z",
+      "volumeNum": 14667546.324205998,
+      "liquidityNum": 607943.92913,
+      "endDateIso": "2027-01-01",
+      "startDateIso": "2025-07-03",
+      "clobTokenIds": "[\"32338220190071351435772801779725302244575775216413325951443816017994629993401\", \"25659310674993675562345759665114759892400026242514633218387667107987341231962\"]"
+    },
+    {
+      "id": "559652",
+      "question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+      "conditionId": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+      "slug": "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568",
+      "endDate": "2028-11-08T04:59:00Z",
+      "liquidity": "470690.2173",
+      "startDate": "2025-07-11T18:35:56.805Z",
+      "description": "This market will resolve to Yes if Gavin Newsom wins the 2028 Democratic nomination.",
+      "outcomes": "[\"Yes\", \"No\"]",
+      "outcomePrices": "[\"0.1545\", \"0.8455\"]",
+      "volume": "27929828.883110974",
+      "active": true,
+      "closed": false,
+      "createdAt": "2025-07-11T18:35:56.805Z",
+      "volumeNum": 27929828.883110974,
+      "liquidityNum": 470690.2173,
+      "endDateIso": "2028-11-08",
+      "startDateIso": "2025-07-11",
+      "clobTokenIds": "[\"71321045679252212594626385532706912750332785719425328963137931232\", \"52114319501245915516055106046884209969926127482827954674443846427813813222426\"]"
+    }
+  ],
+  "nextCursor": null
+}

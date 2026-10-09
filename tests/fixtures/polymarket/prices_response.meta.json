@@ -1,0 +1,19 @@
+{
+  "recorded_at": "2026-10-09T13:43:09.320061+00:00",
+  "token_id": "54533043819946592547517511176940999955633860128497669742211153063842200957669",
+  "requests": [
+    {
+      "action": "BUY",
+      "method": "GET",
+      "url": "https://clob.polymarket.com/price?token_id=54533043819946592547517511176940999955633860128497669742211153063842200957669&side=SELL",
+      "note": "User BUY queries SELL side (ask price)"
+    },
+    {
+      "action": "SELL",
+      "method": "GET",
+      "url": "https://clob.polymarket.com/price?token_id=54533043819946592547517511176940999955633860128497669742211153063842200957669&side=BUY",
+      "note": "User SELL queries BUY side (bid price)"
+    }
+  ],
+  "description": "Prices for Gavin Newsom 2028 nomination - Yes outcome"
+}

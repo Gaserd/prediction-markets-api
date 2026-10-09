@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "proxy_wallet": "0xbeef3f30b4188470347542ecd64b5470418e620e",
+      "side": "BUY",
+      "token_id": "81542601039846077964668618799849538243986175326686082556762467310022311182394",
+      "condition_id": "0xdeadfd09430114150d45edadf61e2574d18b9c658b468dfb4e662ed547dfce92",
+      "size": 10.0,
+      "price": 0.999,
+      "timestamp": 1791551778,
+      "title": "Will Gabriel Bortoleto win the 2026 F1 Singapore Grand Prix?",
+      "outcome": "No"
+    },
+    {
+      "proxy_wallet": "0x2a69660046d7acc4ab204d7cc5ba78b0776cd2f7",
+      "side": "BUY",
+      "token_id": "14789693768474927498263094586560176033832565677238146021399249217279244133715",
+      "condition_id": "0xbbd521860f7cd81bb35333783a7d2de99ac3a89d08c90da0725c7a10b9a39ee5",
+      "size": 45.94,
+      "price": 0.5,
+      "timestamp": 1791551778,
+      "title": "Shanghai Rolex Masters: Yi Zhou vs Lorenzo Musetti",
+      "outcome": "Lorenzo Musetti"
+    }
+  ],
+  "pagination": {
+    "limit": 2,
+    "offset": 0,
+    "has_more": true,
+    "next_cursor": "eyJkYXRhIjp7InR5cGUiOiJ0cmFkZXMiLCJwYXJhbXMiOnsibCI6MiwidHMiOjE3OTE1NTE3NzgsInNxIjoiOTUyMzEwMzkwMDA2NzA4MjEwIiwiZCI6Mn19LCJzaWciOiIyZWJiNzZhNWZkYjdiNTcxN2IzZTJmMmQ4MDMwOTBmZSJ9"
+  }
+}

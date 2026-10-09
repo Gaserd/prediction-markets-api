@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-09T13:24:49.588545+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://data-api.polymarket.com/v2/trades",
+    "params": {
+      "asset_id": "32338220190071351435772801779725302244575775216413325951443816017994629993401",
+      "limit": 2
+    }
+  },
+  "description": "Real response from Polymarket Data API v2 /trades endpoint. Trimmed to 2 trades. Note: trades are for different markets/tokens, showing global trade stream structure."
+}
