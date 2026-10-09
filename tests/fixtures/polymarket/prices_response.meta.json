@@ -1,12 +1,12 @@
 {
-  "recorded_at": "2026-10-09T13:24:49.588545+00:00",
+  "recorded_at": "2026-10-09T13:28:00+00:00",
   "request": {
     "method": "GET",
     "url": "https://clob.polymarket.com/price",
     "params": {
       "token_id": "32338220190071351435772801779725302244575775216413325951443816017994629993401",
-      "side": "BUY"
+      "side": "SELL"
     }
   },
-  "description": "Real response from Polymarket CLOB API /price endpoint (singular). Returns best executable price for one token."
+  "description": "Real response from Polymarket CLOB API /price endpoint (singular). Same token as orderbook_response. Query side=SELL to get ask price (what user pays to BUY). Note: Polymarket 'side' is book side, not user action - inverted in our adapter."
 }

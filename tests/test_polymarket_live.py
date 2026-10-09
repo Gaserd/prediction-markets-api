@@ -101,6 +101,11 @@ async def test_live_prices():
     print(f"  SELL (best bid): {sell_price.price}")
     print(f"  Spread: {abs(buy_price.price - sell_price.price)}")
 
+    assert buy_price.price >= sell_price.price, (
+        f"Contract violation: BUY price (ask) {buy_price.price} "
+        f"should be >= SELL price (bid) {sell_price.price}"
+    )
+
 
 @pytest.mark.live
 @pytest.mark.asyncio

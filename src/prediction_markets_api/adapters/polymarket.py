@@ -184,22 +184,33 @@ class PolymarketClient(BaseClient):
     async def get_price(self, outcome_id: str, side: OrderSide) -> Price:
         """Get best executable price for an outcome and side.
 
-        Uses singular /price endpoint for single token queries.
+        Contract:
+        - get_price(BUY) returns the best ask (what a buyer pays to buy)
+        - get_price(SELL) returns the best bid (what a seller receives when selling)
+
+        Important: Polymarket's CLOB API uses 'side' to mean the book side (bid/ask),
+        not the user action. So we invert:
+        - To get the price a user pays to BUY, query side=SELL (the ask side)
+        - To get the price a user receives when SELLing, query side=BUY (the bid side)
 
         Args:
             outcome_id: Polymarket token_id
-            side: OrderSide.BUY or OrderSide.SELL
+            side: OrderSide.BUY (user buying) or OrderSide.SELL (user selling)
 
         Returns:
-            Price object
+            Price object with best executable price
 
         Raises:
             ValueError: If outcome not found or no liquidity
         """
         url = f"{self.CLOB_API_BASE}/price"
+
+        # Invert the side: user BUY -> query SELL side (ask), user SELL -> query BUY side (bid)
+        clob_side = "SELL" if side == OrderSide.BUY else "BUY"
+
         params = {
             "token_id": outcome_id,
-            "side": side.value,
+            "side": clob_side,
         }
 
         try:

@@ -78,11 +78,13 @@ async def test_get_order_book(orderbook_response, respx_mock):
     assert len(order_book.bids) == 3
     assert len(order_book.asks) == 3
 
-    assert order_book.bids[0].price == Decimal("0.03")
-    assert order_book.bids[0].size == Decimal("1769.01")
+    # Bids are sorted descending (highest first)
+    assert order_book.bids[0].price == Decimal("0.003")
+    assert order_book.bids[0].size == Decimal("1417114.55")
 
-    assert order_book.asks[0].price == Decimal("0.031")
-    assert order_book.asks[0].size == Decimal("4270.45")
+    # Asks are sorted ascending (lowest first)
+    assert order_book.asks[0].price == Decimal("0.997")
+    assert order_book.asks[0].size == Decimal("72189.31")
 
     assert order_book.last_trade_price == Decimal("0.969")
     assert order_book.min_order_size == Decimal("5")
@@ -94,9 +96,10 @@ async def test_get_order_book(orderbook_response, respx_mock):
 
 @pytest.mark.asyncio
 async def test_get_price(prices_response, respx_mock):
-    """Test getting best executable price."""
+    """Test getting best executable price with side inversion."""
     outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
 
+    # User wants to BUY, so we query side=SELL (ask side) from CLOB
     respx_mock.get("https://clob.polymarket.com/price").mock(
         return_value=httpx.Response(200, json=prices_response)
     )
@@ -106,8 +109,13 @@ async def test_get_price(prices_response, respx_mock):
 
     assert buy_price.outcome_id == outcome_id
     assert buy_price.side == OrderSide.BUY
-    assert buy_price.price == Decimal("0.03")
+    assert buy_price.price == Decimal("0.031")
     assert buy_price.currency == Currency.USDC
+
+    # Verify the request was made with inverted side
+    requests = respx_mock.calls
+    assert len(requests) == 1
+    assert "side=SELL" in requests[0].request.url.query.decode()
 
 
 @pytest.mark.asyncio
@@ -261,3 +269,50 @@ async def test_partial_market_with_invalid_outcomes(respx_mock):
     market = markets[0]
     assert market.question == "Test market?"
     assert len(market.outcomes) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_price_side_inversion(respx_mock):
+    """Test that get_price correctly inverts side parameter.
+
+    Contract: get_price(BUY) returns ask price (what user pays to buy).
+    Implementation: queries CLOB with side=SELL to get ask side.
+    """
+    outcome_id = "test_token_123"
+
+    # Mock for BUY query (should send side=SELL to CLOB)
+    respx_mock.get("https://clob.polymarket.com/price").mock(
+        return_value=httpx.Response(200, json={"price": "0.60"})
+    )
+
+    async with PolymarketClient() as client:
+        # User wants to BUY
+        buy_price = await client.get_price(outcome_id, OrderSide.BUY)
+
+    # Verify we got the right price
+    assert buy_price.price == Decimal("0.60")
+    assert buy_price.side == OrderSide.BUY
+
+    # Verify the request was made with side=SELL (inverted)
+    requests = respx_mock.calls
+    assert len(requests) == 1
+    assert "side=SELL" in requests[0].request.url.query.decode()
+
+    # Clear mocks for second test
+    respx_mock.reset()
+    respx_mock.get("https://clob.polymarket.com/price").mock(
+        return_value=httpx.Response(200, json={"price": "0.58"})
+    )
+
+    async with PolymarketClient() as client:
+        # User wants to SELL
+        sell_price = await client.get_price(outcome_id, OrderSide.SELL)
+
+    # Verify we got the right price
+    assert sell_price.price == Decimal("0.58")
+    assert sell_price.side == OrderSide.SELL
+
+    # Verify the request was made with side=BUY (inverted)
+    requests = respx_mock.calls
+    assert len(requests) == 1
+    assert "side=BUY" in requests[0].request.url.query.decode()
