@@ -75,16 +75,16 @@ async def test_get_order_book(orderbook_response, respx_mock):
         order_book = await client.get_order_book(outcome_id)
 
     assert order_book.outcome_id == outcome_id
-    assert len(order_book.bids) == 3
-    assert len(order_book.asks) == 3
+    assert len(order_book.bids) == 5
+    assert len(order_book.asks) == 5
 
     # Bids are sorted descending (highest first)
-    assert order_book.bids[0].price == Decimal("0.003")
-    assert order_book.bids[0].size == Decimal("5306.66")
+    assert order_book.bids[0].price == Decimal("0.154")
+    assert order_book.bids[0].size == Decimal("1115.78")
 
     # Asks are sorted ascending (lowest first)
-    assert order_book.asks[0].price == Decimal("0.997")
-    assert order_book.asks[0].size == Decimal("4011781.55")
+    assert order_book.asks[0].price == Decimal("0.155")
+    assert order_book.asks[0].size == Decimal("5237.41")
 
     assert order_book.last_trade_price == Decimal("0.845")
     assert order_book.min_order_size == Decimal("5")
@@ -101,7 +101,7 @@ async def test_get_price(prices_response, respx_mock):
 
     # User wants to BUY, so we query side=SELL (ask side) from CLOB
     respx_mock.get("https://clob.polymarket.com/price").mock(
-        return_value=httpx.Response(200, json=prices_response)
+        return_value=httpx.Response(200, json=prices_response["buy"])
     )
 
     async with PolymarketClient() as client:
@@ -345,13 +345,64 @@ async def test_fixture_consistency():
     # Verify same token
     assert book_meta["token_id"] == price_meta["token_id"], "Fixtures must be from the same token"
 
-    # Verify recorded at same time
-    assert book_meta["recorded_at"] == price_meta["recorded_at"], (
-        "Fixtures must be recorded at the same time"
-    )
+    # Verify recorded within a short time window (allowing for sequential recording)
+    from datetime import datetime, timedelta
+    book_time = datetime.fromisoformat(book_meta["recorded_at"])
+    price_time = datetime.fromisoformat(price_meta["recorded_at"])
+    time_diff = abs((book_time - price_time).total_seconds())
+    assert time_diff < 5, f"Fixtures should be recorded within 5 seconds, got {time_diff}s apart"
 
     # Document the token for test readability
     token_id = book_meta["token_id"]
     assert (
         token_id == "54533043819946592547517511176940999955633860128497669742211153063842200957669"
     )
+
+
+@pytest.mark.asyncio
+async def test_price_matches_order_book_top(orderbook_response, prices_response, respx_mock):
+    """Test that get_price returns top-of-book prices from order book.
+
+    Contract verification:
+    - get_price(BUY) should return best ask (lowest ask price)
+    - get_price(SELL) should return best bid (highest bid price)
+
+    This ensures our order book parsing correctly identifies top of book
+    after sorting the arrays returned by Polymarket CLOB.
+    """
+    outcome_id = "54533043819946592547517511176940999955633860128497669742211153063842200957669"
+
+    # Mock order book
+    respx_mock.get("https://clob.polymarket.com/book").mock(
+        return_value=httpx.Response(200, json=orderbook_response)
+    )
+
+    async with PolymarketClient() as client:
+        order_book = await client.get_order_book(outcome_id)
+
+    best_bid = order_book.bids[0].price  # Highest bid after sorting
+    best_ask = order_book.asks[0].price  # Lowest ask after sorting
+
+    # Reset mocks and test BUY price
+    respx_mock.reset()
+    respx_mock.get("https://clob.polymarket.com/price").mock(
+        return_value=httpx.Response(200, json=prices_response["buy"])
+    )
+
+    async with PolymarketClient() as client:
+        buy_price = await client.get_price(outcome_id, OrderSide.BUY)
+
+    # User BUY price should match best ask (what user pays)
+    assert buy_price.price == best_ask, f"BUY price {buy_price.price} should match best ask {best_ask}"
+
+    # Reset mocks and test SELL price
+    respx_mock.reset()
+    respx_mock.get("https://clob.polymarket.com/price").mock(
+        return_value=httpx.Response(200, json=prices_response["sell"])
+    )
+
+    async with PolymarketClient() as client:
+        sell_price = await client.get_price(outcome_id, OrderSide.SELL)
+
+    # User SELL price should match best bid (what user receives)
+    assert sell_price.price == best_bid, f"SELL price {sell_price.price} should match best bid {best_bid}"
