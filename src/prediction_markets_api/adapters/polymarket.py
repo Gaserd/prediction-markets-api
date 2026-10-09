@@ -102,7 +102,7 @@ class PolymarketClient(BaseClient):
             except (httpx.HTTPError, ValueError) as e:
                 raise ValueError(f"Failed to fetch markets: {e}") from e
 
-            markets = data.get("data", [])
+            markets = data.get("markets", [])
             if not markets:
                 break
 
@@ -110,11 +110,19 @@ class PolymarketClient(BaseClient):
                 try:
                     market = self._parse_market(market_data)
                     yield market
-                except (KeyError, ValueError):
-                    market.partial = True
-                    yield market
+                except (KeyError, ValueError, TypeError):
+                    try:
+                        partial_market = self._parse_partial_market(market_data)
+                        yield partial_market
+                    except Exception:
+                        import logging
 
-            cursor = data.get("next_cursor")
+                        logging.warning(
+                            f"Skipping market due to parse error: {market_data.get('id', 'unknown')}"
+                        )
+                        continue
+
+            cursor = data.get("nextCursor")
             if not cursor:
                 break
 
@@ -140,7 +148,7 @@ class PolymarketClient(BaseClient):
         except (httpx.HTTPError, ValueError) as e:
             raise ValueError(f"Failed to fetch market {market_id}: {e}") from e
 
-        markets = data.get("data", [])
+        markets = data.get("markets", [])
         if not markets:
             raise ValueError(f"Market {market_id} not found")
 
@@ -343,11 +351,13 @@ class PolymarketClient(BaseClient):
 
     def _parse_market(self, data: dict[str, Any]) -> Market:
         """Parse Gamma API market data into Market object."""
-        condition_id = data.get("condition_id", "")
+        import json
+
+        condition_id = data.get("conditionId", "")
         question = data.get("question", "")
         description = data.get("description")
 
-        created_at_str = data.get("created_at") or data.get("start_date_iso")
+        created_at_str = data.get("createdAt") or data.get("startDate")
         if created_at_str:
             created_at = parser.isoparse(created_at_str)
             if created_at.tzinfo is None:
@@ -356,17 +366,17 @@ class PolymarketClient(BaseClient):
             created_at = datetime.now(timezone.utc)
 
         end_date = None
-        end_date_str = data.get("end_date_iso")
+        end_date_str = data.get("endDate")
         if end_date_str:
             end_date = parser.isoparse(end_date_str)
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
 
-        resolved = data.get("closed", False) and data.get("resolved", False)
+        resolved = data.get("closed", False)
 
         volume = None
-        if "volume_num" in data:
-            volume = Decimal(str(data["volume_num"]))
+        if "volumeNum" in data:
+            volume = Decimal(str(data["volumeNum"]))
         elif "volume" in data:
             try:
                 volume = Decimal(str(data["volume"]))
@@ -374,8 +384,8 @@ class PolymarketClient(BaseClient):
                 pass
 
         liquidity = None
-        if "liquidity_num" in data:
-            liquidity = Decimal(str(data["liquidity_num"]))
+        if "liquidityNum" in data:
+            liquidity = Decimal(str(data["liquidityNum"]))
         elif "liquidity" in data:
             try:
                 liquidity = Decimal(str(data["liquidity"]))
@@ -383,12 +393,32 @@ class PolymarketClient(BaseClient):
                 pass
 
         outcomes: list[Outcome] = []
-        tokens = data.get("tokens", [])
-        for token in tokens:
-            outcome_id = token.get("token_id", "")
-            outcome_name = token.get("outcome", "")
 
-            raw_price = token.get("price")
+        outcomes_str = data.get("outcomes", "[]")
+        outcome_prices_str = data.get("outcomePrices", "[]")
+        token_ids_str = data.get("clobTokenIds", "[]")
+
+        try:
+            outcome_names = (
+                json.loads(outcomes_str) if isinstance(outcomes_str, str) else outcomes_str
+            )
+            outcome_prices = (
+                json.loads(outcome_prices_str)
+                if isinstance(outcome_prices_str, str)
+                else outcome_prices_str
+            )
+            token_ids = (
+                json.loads(token_ids_str) if isinstance(token_ids_str, str) else token_ids_str
+            )
+        except (json.JSONDecodeError, ValueError):
+            outcome_names = []
+            outcome_prices = []
+            token_ids = []
+
+        for i, outcome_name in enumerate(outcome_names):
+            token_id = token_ids[i] if i < len(token_ids) else ""
+            raw_price = outcome_prices[i] if i < len(outcome_prices) else None
+
             normalized_price = None
             if raw_price is not None:
                 try:
@@ -398,7 +428,7 @@ class PolymarketClient(BaseClient):
 
             outcomes.append(
                 Outcome(
-                    id=outcome_id,
+                    id=token_id,
                     market_id=condition_id,
                     name=outcome_name,
                     price=normalized_price,
@@ -420,6 +450,38 @@ class PolymarketClient(BaseClient):
             currency=Currency.USDC,
             raw_data=data,
             partial=False,
+        )
+
+    def _parse_partial_market(self, data: dict[str, Any]) -> Market:
+        """Parse partial market data when full parsing fails."""
+        condition_id = data.get("conditionId", data.get("id", "unknown"))
+        question = data.get("question", "Unknown market")
+
+        try:
+            created_at_str = data.get("createdAt") or data.get("startDate")
+            if created_at_str:
+                created_at = parser.isoparse(created_at_str)
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+            else:
+                created_at = datetime.now(timezone.utc)
+        except (ValueError, TypeError):
+            created_at = datetime.now(timezone.utc)
+
+        return Market(
+            id=str(condition_id),
+            venue="polymarket",
+            question=question,
+            description=data.get("description"),
+            outcomes=[],
+            created_at=created_at,
+            end_date=None,
+            resolved=False,
+            volume=None,
+            liquidity=None,
+            currency=Currency.USDC,
+            raw_data=data,
+            partial=True,
         )
 
     def _parse_order_book(self, outcome_id: str, data: dict[str, Any]) -> OrderBook:
@@ -504,23 +566,29 @@ class PolymarketClient(BaseClient):
 
     def _parse_trade(self, outcome_id: str, data: dict[str, Any]) -> Trade:
         """Parse Data API v2 trade data."""
-        trade_id = data.get("id", "")
-        market_id = data.get("market", "")
+        trade_id = str(data.get("proxy_wallet", ""))
+        market_id = data.get("condition_id", "")
 
         side_str = data.get("side", "BUY")
         side = OrderSide.BUY if side_str.upper() == "BUY" else OrderSide.SELL
 
-        price_str = data.get("price", "0")
-        price = Decimal(price_str)
+        price_val = data.get("price", 0)
+        price = Decimal(str(price_val))
 
-        size_str = data.get("size", "0")
-        size = Decimal(size_str)
+        size_val = data.get("size", 0)
+        size = Decimal(str(size_val))
 
-        timestamp_str = data.get("timestamp")
-        if timestamp_str:
-            timestamp = parser.isoparse(timestamp_str)
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=timezone.utc)
+        timestamp_val = data.get("timestamp")
+        if timestamp_val:
+            try:
+                if isinstance(timestamp_val, (int, float)):
+                    timestamp = datetime.fromtimestamp(timestamp_val, tz=timezone.utc)
+                else:
+                    timestamp = parser.isoparse(str(timestamp_val))
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                timestamp = datetime.now(timezone.utc)
         else:
             timestamp = datetime.now(timezone.utc)
 

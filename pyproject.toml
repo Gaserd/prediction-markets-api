@@ -52,6 +52,7 @@ packages = ["src/prediction_markets_api"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "-m 'not live'"
 markers = [
     "live: marks tests that require live API access (deselect with '-m \"not live\"')",
 ]
@@ -68,10 +69,6 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 check_untyped_defs = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
 
 [tool.ruff]
 line-length = 100

@@ -1,53 +1,47 @@
 {
-  "data": [
+  "markets": [
     {
-      "condition_id": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      "question": "Will Bitcoin be above $100,000 on December 31, 2026?",
-      "description": "This market resolves to Yes if Bitcoin (BTC) trades above $100,000 USD on any major exchange at 23:59:59 UTC on December 31, 2026.",
-      "created_at": "2026-01-15T10:00:00Z",
-      "start_date_iso": "2026-01-15T10:00:00Z",
-      "end_date_iso": "2026-12-31T23:59:59Z",
+      "id": "559651",
+      "question": "Xi Jinping out before 2027?",
+      "conditionId": "0xa467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7",
+      "slug": "xi-jinping-out-before-2027",
+      "endDate": "2027-01-01T04:59:00Z",
+      "liquidity": "607943.92913",
+      "startDate": "2025-07-03T20:37:00.228Z",
+      "description": "This market will resolve to \"Yes\" if China's General Secretary Xi Jinping is removed from power before 2027.",
+      "outcomes": "[\"Yes\", \"No\"]",
+      "outcomePrices": "[\"0.0305\", \"0.9695\"]",
+      "volume": "14667546.324205998",
+      "active": true,
       "closed": false,
-      "resolved": false,
-      "volume_num": 1250000.50,
-      "liquidity_num": 45000.25,
-      "tokens": [
-        {
-          "token_id": "71321045679252212594626385532706912750332785719425328963137931232",
-          "outcome": "Yes",
-          "price": "0.65"
-        },
-        {
-          "token_id": "52114319501245915516055106046884209969926127482827954674443846427813813222426",
-          "outcome": "No",
-          "price": "0.35"
-        }
-      ]
+      "createdAt": "2025-07-03T20:25:56.889606Z",
+      "volumeNum": 14667546.324205998,
+      "liquidityNum": 607943.92913,
+      "endDateIso": "2027-01-01",
+      "startDateIso": "2025-07-03",
+      "clobTokenIds": "[\"32338220190071351435772801779725302244575775216413325951443816017994629993401\", \"25659310674993675562345759665114759892400026242514633218387667107987341231962\"]"
     },
     {
-      "condition_id": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "question": "Will Tesla stock reach $500 by June 30, 2026?",
-      "description": "Resolves Yes if TSLA closes at or above $500 on June 30, 2026.",
-      "created_at": "2026-02-01T14:30:00Z",
-      "start_date_iso": "2026-02-01T14:30:00Z",
-      "end_date_iso": "2026-06-30T20:00:00Z",
+      "id": "559652",
+      "question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+      "conditionId": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+      "slug": "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568",
+      "endDate": "2028-11-08T04:59:00Z",
+      "liquidity": "470690.2173",
+      "startDate": "2025-07-11T18:35:56.805Z",
+      "description": "This market will resolve to Yes if Gavin Newsom wins the 2028 Democratic nomination.",
+      "outcomes": "[\"Yes\", \"No\"]",
+      "outcomePrices": "[\"0.1545\", \"0.8455\"]",
+      "volume": "27929828.883110974",
+      "active": true,
       "closed": false,
-      "resolved": false,
-      "volume_num": 850000.00,
-      "liquidity_num": 32000.00,
-      "tokens": [
-        {
-          "token_id": "98765432109876543210987654321098765432109876543210987654321098765432",
-          "outcome": "Yes",
-          "price": "0.42"
-        },
-        {
-          "token_id": "12345678901234567890123456789012345678901234567890123456789012345678",
-          "outcome": "No",
-          "price": "0.58"
-        }
-      ]
+      "createdAt": "2025-07-11T18:35:56.805Z",
+      "volumeNum": 27929828.883110974,
+      "liquidityNum": 470690.2173,
+      "endDateIso": "2028-11-08",
+      "startDateIso": "2025-07-11",
+      "clobTokenIds": "[\"71321045679252212594626385532706912750332785719425328963137931232\", \"52114319501245915516055106046884209969926127482827954674443846427813813222426\"]"
     }
   ],
-  "next_cursor": null
+  "nextCursor": null
 }
