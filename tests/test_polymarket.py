@@ -346,7 +346,7 @@ async def test_fixture_consistency():
     assert book_meta["token_id"] == price_meta["token_id"], "Fixtures must be from the same token"
 
     # Verify recorded within a short time window (allowing for sequential recording)
-    from datetime import datetime, timedelta
+    from datetime import datetime
     book_time = datetime.fromisoformat(book_meta["recorded_at"])
     price_time = datetime.fromisoformat(price_meta["recorded_at"])
     time_diff = abs((book_time - price_time).total_seconds())
