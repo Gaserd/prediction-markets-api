@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from decimal import Decimal
+from typing import Any
 
 from prediction_markets_api.models.base import Market, OrderBook, OrderSide, Price, Trade
 
@@ -19,7 +20,7 @@ class BaseClient(ABC):
         closed: bool | None = None,
         limit: int | None = None,
         page_size: int = 100,
-        **kwargs: object,
+        venue_params: dict[str, Any] | None = None,
     ) -> AsyncIterator[Market]:
         """List markets from the venue.
 
@@ -27,7 +28,7 @@ class BaseClient(ABC):
             closed: Filter by closed status (None = all)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (venue-specific default)
-            **kwargs: Venue-specific filters
+            venue_params: Venue-specific parameters as a dict (optional)
 
         Yields:
             Market objects (up to `limit` total)
@@ -38,7 +39,7 @@ class BaseClient(ABC):
     async def iter_markets(
         self,
         closed: bool | None = None,
-        **kwargs: object,
+        venue_params: dict[str, Any] | None = None,
     ) -> AsyncIterator[Market]:
         """Iterate over all markets without limit.
 
@@ -46,12 +47,12 @@ class BaseClient(ABC):
 
         Args:
             closed: Filter by closed status (None = all)
-            **kwargs: Venue-specific filters
+            venue_params: Venue-specific parameters as a dict (optional)
 
         Yields:
             Market objects
         """
-        async for market in self.list_markets(closed=closed, limit=None, **kwargs):  # type: ignore[arg-type]
+        async for market in self.list_markets(closed=closed, limit=None, venue_params=venue_params):
             yield market
 
     @abstractmethod

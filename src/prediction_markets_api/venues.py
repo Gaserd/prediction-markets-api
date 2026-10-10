@@ -76,11 +76,11 @@ VENUES: dict[str, VenueInfo] = {
         geo_restrictions=None,
         api_key_for_read=False,
         api_key_for_trade=True,
-        can_read=False,
+        can_read=True,
         can_trade=False,
-        status=VenueStatus.PLANNED,
+        status=VenueStatus.IMPLEMENTED,
         signup_link_key="limitless",
-        liquidity_source=None,  # Unknown until implemented
+        liquidity_source=None,  # Limitless does not provide liquidity (absent on all ~75 checked live markets)
     ),
     # Wave 2
     "hyperliquid": VenueInfo(

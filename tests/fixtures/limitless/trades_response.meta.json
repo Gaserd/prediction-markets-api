@@ -1,0 +1,6 @@
+{
+  "recorded_at": "2026-10-10T06:13:00.000Z",
+  "request": "GET /markets/btc-up-or-down-5-min-1791612600/events?limit=10",
+  "market_id": "btc-up-or-down-5-min-1791612600",
+  "description": "Recent trades for BTC 5-min market"
+}

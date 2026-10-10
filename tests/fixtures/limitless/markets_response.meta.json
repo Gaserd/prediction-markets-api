@@ -1,0 +1,5 @@
+{
+  "recorded_at": "2026-10-10T06:13:00.000Z",
+  "request": "GET /markets/active?limit=3",
+  "description": "Active markets response with 3 markets for testing pagination and parsing"
+}
