@@ -6,7 +6,7 @@ Limitless-specific semantics:
 - Order books show YES side (bids descending, asks ascending)
 - Markets identified by slug (e.g., btc-hourly-price)
 - Built on Base (L2)
-- Liquidity metric not provided by the API (absent on ~75% of markets)
+- Liquidity metric not provided by the API (absent on all ~75 checked live markets)
 """
 
 import os
@@ -69,6 +69,7 @@ class LimitlessClient(BaseClient):
         closed: bool | None = None,
         limit: int | None = None,
         page_size: int = 25,
+        venue_params: dict[str, Any] | None = None,
         **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets using Limitless API page pagination.
@@ -77,6 +78,7 @@ class LimitlessClient(BaseClient):
             closed: Filter by closed status (None = all, False = active only)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 25)
+            venue_params: Venue-specific parameters as a dict (optional, unused by Limitless)
             **kwargs: Additional Limitless API filters (tradeType, automationType, etc.)
 
         Yields:

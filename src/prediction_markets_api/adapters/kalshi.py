@@ -64,12 +64,12 @@ class KalshiClient(BaseClient):
         self._api_key: str | None = os.getenv("KALSHI_API_KEY")
         self._api_secret: str | None = os.getenv("KALSHI_API_SECRET")
 
-    async def list_markets(  # type: ignore[override]
+    async def list_markets(
         self,
         closed: bool | None = None,
         limit: int | None = None,
         page_size: int = 100,
-        include_multivariate: bool = False,
+        venue_params: dict[str, Any] | None = None,
         **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets using Kalshi API cursor pagination.
@@ -78,10 +78,12 @@ class KalshiClient(BaseClient):
             closed: Filter by closed status (None = all)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 200)
-            include_multivariate: Include multivariate combo markets (KXMVE*). Default False
-                to exclude them via server-side mve_filter=exclude, as they flood listings
-                and often 404 on direct GET.
-            **kwargs: Additional Kalshi API filters (status, series_ticker, etc.)
+            venue_params: Venue-specific parameters as a dict (optional, unused by Kalshi)
+            **kwargs: Additional Kalshi API filters. Supported kwargs:
+                - include_multivariate (bool): Include multivariate combo markets (KXMVE*).
+                  Default False to exclude them via server-side mve_filter=exclude, as they
+                  flood listings and often 404 on direct GET. Kalshi-specific.
+                - Other filters: status, series_ticker, etc.
 
         Yields:
             Market objects (up to `limit` total)
@@ -89,6 +91,9 @@ class KalshiClient(BaseClient):
         Raises:
             ValueError: If API returns invalid data
         """
+        # Extract Kalshi-specific parameter from kwargs
+        include_multivariate = bool(kwargs.pop("include_multivariate", False))
+
         url = f"{self.API_BASE}/markets"
         params: dict[str, Any] = {"limit": min(page_size, 200)}
 
