@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.venues import VENUES
 
 
 @dataclass
@@ -31,7 +32,8 @@ def discover_adapters(fixtures_base: Path) -> list[AdapterConfig]:
     Design:
         - Auto-discovers BaseClient subclasses from adapters module
         - Matches each adapter to its fixture directory
-        - New adapters are automatically included (e.g., Kalshi, Limitless)
+        - Reads liquidity_source from the real venues registry
+        - New adapters are automatically included (e.g., Limitless)
     """
     adapters: list[AdapterConfig] = []
 
@@ -53,9 +55,9 @@ def discover_adapters(fixtures_base: Path) -> list[AdapterConfig]:
             if not fixtures_dir.exists():
                 continue
 
-            # Determine liquidity source field from adapter's venue implementation
-            # This maps to the raw fixture field that contains liquidity data
-            liquidity_source = _infer_liquidity_source(venue_name)
+            # Get liquidity source from venues registry
+            venue_info = VENUES.get(venue_name)
+            liquidity_source = venue_info.liquidity_source if venue_info else None
 
             adapters.append(
                 AdapterConfig(
@@ -67,25 +69,6 @@ def discover_adapters(fixtures_base: Path) -> list[AdapterConfig]:
             )
 
     return adapters
-
-
-def _infer_liquidity_source(venue_name: str) -> str | None:
-    """Map venue name to the raw data field name for liquidity.
-
-    Args:
-        venue_name: Venue identifier (e.g., 'polymarket', 'kalshi')
-
-    Returns:
-        Field name in raw fixture data, or None if liquidity is not available
-    """
-    # Registry of known liquidity source fields per venue
-    LIQUIDITY_FIELDS: dict[str, str | None] = {
-        "polymarket": "liquidityNum",  # Polymarket uses liquidityNum in raw data
-        "kalshi": None,  # Kalshi may not expose liquidity
-        "limitless": "liquidity",  # Hypothetical - adjust when added
-    }
-
-    return LIQUIDITY_FIELDS.get(venue_name, None)
 
 
 def load_fixtures(adapter: AdapterConfig) -> dict[str, dict[str, Any]]:

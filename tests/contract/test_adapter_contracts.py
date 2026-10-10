@@ -427,13 +427,13 @@ async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_cl
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: get_price() does not match order book fixture. "
-    "get_price makes separate API call, expects different mock setup.",
-)
 async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, adapter_client):
-    """Verify get_price(BUY) == best ask and get_price(SELL) == best bid."""
+    """Verify get_price(BUY) == best ask and get_price(SELL) == best bid.
+
+    Fixtures are recorded from the same token/ticker, so prices must match.
+    - Polymarket: get_price() calls /price endpoint (mock with prices fixture)
+    - Kalshi: get_price() reads /orderbook endpoint (mock with orderbook fixture)
+    """
     fixtures = adapter_fixtures
 
     if "orderbook_response" not in fixtures:
@@ -442,26 +442,53 @@ async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, ada
     orderbook_data = fixtures["orderbook_response"]["data"]
     orderbook_meta = fixtures["orderbook_response"]["meta"]
 
+    # Extract outcome_id (token_id for Polymarket, ticker for Kalshi)
     outcome_id = None
-    if orderbook_meta and "token_id" in orderbook_meta:
-        outcome_id = orderbook_meta["token_id"]
-    elif "asset_id" in orderbook_data:
+    if orderbook_meta:
+        outcome_id = orderbook_meta.get("token_id") or orderbook_meta.get("ticker")
+    if not outcome_id and "asset_id" in orderbook_data:
         outcome_id = orderbook_data["asset_id"]
 
     if not outcome_id:
         pytest.skip(f"Cannot determine outcome_id for {adapter_config.name}")
 
     with respx.mock:
-        # Mock order book endpoint
-        respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=orderbook_data))
+        # Mock order book endpoint for both get_order_book and Kalshi's get_price
+        if adapter_config.name == "polymarket":
+            respx.get(url__regex=r".*/book.*").mock(
+                return_value=Response(200, json=orderbook_data)
+            )
+        elif adapter_config.name == "kalshi":
+            # Kalshi uses /orderbook for both get_order_book and get_price
+            respx.get(url__regex=r".*/orderbook.*").mock(
+                return_value=Response(200, json=orderbook_data)
+            )
+        else:
+            # Generic fallback
+            respx.get(url__regex=r".*/book.*|.*/orderbook.*").mock(
+                return_value=Response(200, json=orderbook_data)
+            )
 
-        # Mock price endpoints
-        # Note: This test is marked xfail because get_price() makes separate API calls
-        # that require different mock responses than the order book
-        if "prices_response" in fixtures:
-            prices_data = fixtures["prices_response"]["data"]
-            respx.get(url__regex=r".*/price.*").mock(return_value=Response(200, json=prices_data))
+        # Mock price endpoint for Polymarket (separate /price API)
+        if adapter_config.name == "polymarket" and "prices_response" in fixtures:
+            prices_fixture = fixtures["prices_response"]["data"]
+            # Polymarket /price endpoint returns {"price": "0.123"} per call
+            # Fixture has {buy: {price: ...}, sell: {price: ...}}
+            # BUY action queries side=SELL (ask), SELL action queries side=BUY (bid)
 
+            # Mock for BUY (queries side=SELL, gets ask price)
+            respx.get(
+                url__regex=r".*/price.*",
+                params__contains={"side": "SELL"}
+            ).mock(return_value=Response(200, json=prices_fixture.get("buy", {"price": "0"})))
+
+            # Mock for SELL (queries side=BUY, gets bid price)
+            respx.get(
+                url__regex=r".*/price.*",
+                params__contains={"side": "BUY"}
+            ).mock(return_value=Response(200, json=prices_fixture.get("sell", {"price": "0"})))
+
+        # Get order book to extract expected best bid/ask
         book = await adapter_client.get_order_book(outcome_id)
 
         if not book.bids or not book.asks:
@@ -473,13 +500,13 @@ async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, ada
         # get_price(BUY) should return best ask (what buyer pays)
         buy_price = await adapter_client.get_price(outcome_id, OrderSide.BUY)
         assert buy_price.price == best_ask, (
-            f"get_price(BUY)={buy_price.price} != best_ask={best_ask}"
+            f"{adapter_config.name}: get_price(BUY)={buy_price.price} != best_ask={best_ask}"
         )
 
         # get_price(SELL) should return best bid (what seller receives)
         sell_price = await adapter_client.get_price(outcome_id, OrderSide.SELL)
         assert sell_price.price == best_bid, (
-            f"get_price(SELL)={sell_price.price} != best_bid={best_bid}"
+            f"{adapter_config.name}: get_price(SELL)={sell_price.price} != best_bid={best_bid}"
         )
 
 
@@ -620,10 +647,6 @@ def test_fixture_hygiene(adapter_config, adapter_fixtures):
 
         assert "recorded_at" in meta, f"Meta file {meta_file.name} missing 'recorded_at'"
 
-        # Support both 'request' (single) and 'requests' (multiple)
-        has_request = "request" in meta or "requests" in meta
-        assert has_request, f"Meta file {meta_file.name} missing 'request' or 'requests'"
-
         # Validate recorded_at is parseable ISO-8601
         recorded_at_str = meta["recorded_at"]
         try:
@@ -631,12 +654,29 @@ def test_fixture_hygiene(adapter_config, adapter_fixtures):
         except ValueError as e:
             pytest.fail(f"Invalid ISO-8601 timestamp in {meta_file.name}: {recorded_at_str} - {e}")
 
-        # Validate request(s) has url and method
-        requests = meta.get("requests") or [meta.get("request")]
-        for req in requests:
-            if req:
-                assert "url" in req, f"Meta file {meta_file.name} request missing 'url'"
-                assert "method" in req, f"Meta file {meta_file.name} request missing 'method'"
+        # Support multiple formats:
+        # 1. 'request': {url, method} - single nested request
+        # 2. 'requests': [{url, method}, ...] - multiple nested requests
+        # 3. Top-level url and method - Kalshi format
+
+        has_request_info = False
+
+        if "request" in meta or "requests" in meta:
+            # Nested format (Polymarket)
+            has_request_info = True
+            requests = meta.get("requests") or [meta.get("request")]
+            for req in requests:
+                if req:
+                    assert "url" in req, f"Meta file {meta_file.name} request missing 'url'"
+                    assert "method" in req, f"Meta file {meta_file.name} request missing 'method'"
+        elif "url" in meta and "method" in meta:
+            # Top-level format (Kalshi)
+            has_request_info = True
+
+        assert has_request_info, (
+            f"Meta file {meta_file.name} missing request info. "
+            "Expected 'request'/'requests' object(s) or top-level 'url'/'method' fields."
+        )
 
 
 # =============================================================================
