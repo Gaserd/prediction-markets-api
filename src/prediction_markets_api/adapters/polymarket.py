@@ -63,24 +63,26 @@ class PolymarketClient(BaseClient):
     async def list_markets(
         self,
         closed: bool | None = None,
-        limit: int = 100,
+        limit: int | None = None,
+        page_size: int = 100,
         **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets using Gamma API keyset pagination.
 
         Args:
             closed: Filter by closed status (None = all)
-            limit: Results per page (1-100)
+            limit: Maximum total markets to return (None = unlimited)
+            page_size: Results per API request (1-100)
             **kwargs: Additional Gamma API filters (volume_num_min, etc.)
 
         Yields:
-            Market objects
+            Market objects (up to `limit` total)
 
         Raises:
             ValueError: If API returns invalid data
         """
         url = f"{self.GAMMA_API_BASE}/markets/keyset"
-        params: dict[str, Any] = {"limit": min(limit, 100)}
+        params: dict[str, Any] = {"limit": min(page_size, 100)}
 
         if closed is not None:
             params["closed"] = str(closed).lower()
@@ -90,6 +92,7 @@ class PolymarketClient(BaseClient):
                 params[key] = value
 
         cursor: str | None = None
+        yielded = 0
 
         while True:
             if cursor:
@@ -107,13 +110,18 @@ class PolymarketClient(BaseClient):
                 break
 
             for market_data in markets:
+                if limit is not None and yielded >= limit:
+                    return
+
                 try:
                     market = self._parse_market(market_data)
                     yield market
+                    yielded += 1
                 except (KeyError, ValueError, TypeError):
                     try:
                         partial_market = self._parse_partial_market(market_data)
                         yield partial_market
+                        yielded += 1
                     except Exception:
                         import logging
 
@@ -389,6 +397,7 @@ class PolymarketClient(BaseClient):
             except (ValueError, TypeError):
                 pass
 
+        # Polymarket provides liquidityNum as an actual liquidity metric
         liquidity = None
         if "liquidityNum" in data:
             liquidity = Decimal(str(data["liquidityNum"]))
@@ -397,6 +406,12 @@ class PolymarketClient(BaseClient):
                 liquidity = Decimal(str(data["liquidity"]))
             except (ValueError, TypeError):
                 pass
+
+        # Polymarket doesn't provide open_interest, best_bid_size, or best_ask_size
+        # at the market level (available per-token via CLOB API)
+        open_interest = None
+        best_bid_size = None
+        best_ask_size = None
 
         outcomes: list[Outcome] = []
 
@@ -452,6 +467,9 @@ class PolymarketClient(BaseClient):
             end_date=end_date,
             resolved=resolved,
             volume=volume,
+            open_interest=open_interest,
+            best_bid_size=best_bid_size,
+            best_ask_size=best_ask_size,
             liquidity=liquidity,
             currency=Currency.USDC,
             raw_data=data,
@@ -484,6 +502,9 @@ class PolymarketClient(BaseClient):
             end_date=None,
             resolved=False,
             volume=None,
+            open_interest=None,
+            best_bid_size=None,
+            best_ask_size=None,
             liquidity=None,
             currency=Currency.USDC,
             raw_data=data,

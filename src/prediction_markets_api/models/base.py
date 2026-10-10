@@ -72,7 +72,22 @@ class Market(BaseModel):
     end_date: datetime | None = Field(None, description="Market end/close timestamp (UTC)")
     resolved: bool = Field(default=False, description="Whether market is resolved")
     volume: Decimal | None = Field(None, description="Total trading volume", ge=Decimal("0"))
-    liquidity: Decimal | None = Field(None, description="Available liquidity", ge=Decimal("0"))
+    open_interest: Decimal | None = Field(
+        None,
+        description="Open interest in venue-native units (contracts, shares, etc.)",
+        ge=Decimal("0"),
+    )
+    best_bid_size: Decimal | None = Field(
+        None, description="Size at top of book (bid side)", ge=Decimal("0")
+    )
+    best_ask_size: Decimal | None = Field(
+        None, description="Size at top of book (ask side)", ge=Decimal("0")
+    )
+    liquidity: Decimal | None = Field(
+        None,
+        description="Venue-provided liquidity metric (None if venue doesn't provide one)",
+        ge=Decimal("0"),
+    )
     currency: Currency = Field(default=Currency.USD, description="Market currency")
     raw_data: dict[str, Any] = Field(
         default_factory=dict, description="Original venue response (preserved)"

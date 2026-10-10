@@ -17,21 +17,42 @@ class BaseClient(ABC):
     async def list_markets(
         self,
         closed: bool | None = None,
-        limit: int = 100,
+        limit: int | None = None,
+        page_size: int = 100,
         **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets from the venue.
 
         Args:
             closed: Filter by closed status (None = all)
-            limit: Maximum results per page
+            limit: Maximum total markets to return (None = unlimited)
+            page_size: Results per API request (venue-specific default)
+            **kwargs: Venue-specific filters
+
+        Yields:
+            Market objects (up to `limit` total)
+        """
+        raise NotImplementedError
+        yield  # pragma: no cover
+
+    async def iter_markets(
+        self,
+        closed: bool | None = None,
+        **kwargs: object,
+    ) -> AsyncIterator[Market]:
+        """Iterate over all markets without limit.
+
+        Convenience wrapper around list_markets with limit=None.
+
+        Args:
+            closed: Filter by closed status (None = all)
             **kwargs: Venue-specific filters
 
         Yields:
             Market objects
         """
-        raise NotImplementedError
-        yield  # pragma: no cover
+        async for market in self.list_markets(closed=closed, limit=None, **kwargs):  # type: ignore[arg-type]
+            yield market
 
     @abstractmethod
     async def get_market(self, market_id: str) -> Market:

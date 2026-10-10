@@ -27,6 +27,11 @@ jobs:
       
       - name: Check formatting with ruff
         run: ruff format --check .
+      
+      - name: Check README venue table is up to date
+        run: |
+          pip install -e .
+          python scripts/check_readme_table.py
 
   typecheck:
     runs-on: ubuntu-latest

@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-10T05:16:09.205419+00:00",
+  "ticker": "KXNEXTNATOSECGEN-99-KIOH",
+  "method": "DERIVED",
+  "url": "https://api.elections.kalshi.com/trade-api/v2/markets/KXNEXTNATOSECGEN-99-KIOH/orderbook",
+  "note": "Prices derived from order book recorded back-to-back. BUY price = 1 - best_no_bid, SELL price = best_yes_bid",
+  "description": "Prices for KXNEXTNATOSECGEN-99-KIOH",
+  "yes_bids_count": 1,
+  "no_bids_count": 9
+}
