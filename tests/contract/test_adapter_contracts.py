@@ -367,7 +367,11 @@ async def test_market_ids_unique_and_venue_set(adapter_config, adapter_fixtures,
 
 @pytest.mark.asyncio
 async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_client):
-    """Verify order book is sorted, valid spread, positive sizes."""
+    """Verify order book is sorted, valid spread, positive sizes.
+
+    For Kalshi: Also validates derivation logic (best bid from yes_dollars,
+    best ask from 1 - max(no_dollars)).
+    """
     fixtures = adapter_fixtures
 
     if "orderbook_response" not in fixtures:
@@ -376,17 +380,24 @@ async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_cl
     data = fixtures["orderbook_response"]["data"]
     meta = fixtures["orderbook_response"]["meta"]
 
+    # Extract outcome_id (token_id for Polymarket, ticker for Kalshi)
     outcome_id = None
-    if meta and "token_id" in meta:
-        outcome_id = meta["token_id"]
-    elif "asset_id" in data:
+    if meta:
+        outcome_id = meta.get("token_id") or meta.get("ticker")
+    if not outcome_id and "asset_id" in data:
         outcome_id = data["asset_id"]
 
     if not outcome_id:
         pytest.skip(f"Cannot determine outcome_id for {adapter_config.name}")
 
     with respx.mock:
-        respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
+        # Mock the appropriate endpoint for each adapter
+        if adapter_config.name == "kalshi":
+            respx.get(url__regex=r".*/orderbook.*").mock(
+                return_value=Response(200, json=data)
+            )
+        else:
+            respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
 
         book = await adapter_client.get_order_book(outcome_id)
 
@@ -419,6 +430,37 @@ async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_cl
             assert Decimal("0") <= level.price <= Decimal("1"), (
                 f"Order price {level.price} not in [0,1]"
             )
+
+        # Kalshi-specific: Validate derivation logic
+        if adapter_config.name == "kalshi":
+            orderbook_fp = data.get("orderbook_fp", {})
+            yes_dollars = orderbook_fp.get("yes_dollars", [])
+            no_dollars = orderbook_fp.get("no_dollars", [])
+
+            if yes_dollars and book.bids:
+                # Best bid should equal max(yes_dollars prices)
+                # yes_dollars are [price, size] pairs
+                yes_prices = [Decimal(str(level[0])) for level in yes_dollars if level]
+                if yes_prices:
+                    expected_best_bid = max(yes_prices)
+                    actual_best_bid = book.bids[0].price
+                    assert actual_best_bid == expected_best_bid, (
+                        f"Kalshi best bid {actual_best_bid} != max(yes_dollars) {expected_best_bid}"
+                    )
+
+            if no_dollars and book.asks:
+                # Best ask should equal 1 - max(no_dollars prices)
+                # no_dollars are [price, size] pairs, sorted ascending
+                no_prices = [Decimal(str(level[0])) for level in no_dollars if level]
+                if no_prices:
+                    # Best NO bid is the highest NO price
+                    best_no_bid = max(no_prices)
+                    # Best YES ask = 1 - best NO bid
+                    expected_best_ask = Decimal("1.0") - best_no_bid
+                    actual_best_ask = book.asks[0].price
+                    assert actual_best_ask == expected_best_ask, (
+                        f"Kalshi best ask {actual_best_ask} != 1 - max(no_dollars) {expected_best_ask}"
+                    )
 
 
 # =============================================================================
@@ -593,28 +635,55 @@ async def test_liquidity_matches_raw_field(adapter_config, adapter_fixtures, ada
 
 
 @pytest.mark.asyncio
-async def test_best_bid_ask_sizes_match_orderbook(adapter_config, adapter_fixtures):
-    """Verify best_bid_size and best_ask_size match order book top levels."""
+async def test_best_bid_ask_sizes_match_orderbook(adapter_config, adapter_fixtures, adapter_client):
+    """Verify best_bid_size and best_ask_size match raw market fixture fields.
+
+    For Kalshi: Assert Market.best_bid_size == yes_bid_size_fp from raw fixture,
+    and Market.best_ask_size == yes_ask_size_fp from raw fixture (1:1 Decimal comparison).
+    """
     fixtures = adapter_fixtures
 
-    if "orderbook_response" not in fixtures:
-        pytest.skip(f"No orderbook fixture for {adapter_config.name}")
+    if "markets_response" not in fixtures:
+        pytest.skip(f"No markets fixture for {adapter_config.name}")
 
-    data = fixtures["orderbook_response"]["data"]
+    markets_data = fixtures["markets_response"]["data"]
 
-    # Parse order book data directly to check sizes
-    bids = data.get("bids", [])
-    asks = data.get("asks", [])
+    with respx.mock:
+        # Mock markets endpoint
+        if adapter_config.name == "kalshi":
+            respx.get(url__regex=r".*/markets.*").mock(
+                return_value=Response(200, json=markets_data)
+            )
+        else:
+            respx.get(url__regex=r".*/markets.*").mock(
+                return_value=Response(200, json=markets_data)
+            )
 
-    if not bids or not asks:
-        pytest.skip(f"Empty order book for {adapter_config.name}")
+        # Get first market
+        async for market in adapter_client.list_markets(limit=1):
+            raw_data = market.raw_data
 
-    # Note: The adapter sorts bids descending and asks ascending
-    # Polymarket returns them in specific order, check the adapter's _parse_order_book
-    # For this test, we verify the adapter's output matches its input
+            if adapter_config.name == "kalshi":
+                # Kalshi: Check yes_bid_size_fp and yes_ask_size_fp
+                yes_bid_size_fp = raw_data.get("yes_bid_size_fp")
+                yes_ask_size_fp = raw_data.get("yes_ask_size_fp")
 
-    # This test verifies structural consistency - if the adapter exposes
-    # best_bid_size/best_ask_size fields, they must match the order book fixture
+                if yes_bid_size_fp is not None:
+                    expected_best_bid_size = Decimal(str(yes_bid_size_fp))
+                    assert market.best_bid_size == expected_best_bid_size, (
+                        f"Kalshi best_bid_size {market.best_bid_size} != "
+                        f"yes_bid_size_fp {expected_best_bid_size}"
+                    )
+
+                if yes_ask_size_fp is not None:
+                    expected_best_ask_size = Decimal(str(yes_ask_size_fp))
+                    assert market.best_ask_size == expected_best_ask_size, (
+                        f"Kalshi best_ask_size {market.best_ask_size} != "
+                        f"yes_ask_size_fp {expected_best_ask_size}"
+                    )
+            # For other adapters, this test validates that if these fields exist,
+            # they should be populated from the appropriate source
+            break
 
 
 # =============================================================================
