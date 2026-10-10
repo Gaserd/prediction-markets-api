@@ -3,9 +3,11 @@
 from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
 from prediction_markets_api.models.base import (
+    Currency,
     Market,
     OrderBook,
     OrderLevel,
+    OrderSide,
     Outcome,
     Price,
     Trade,
@@ -20,6 +22,8 @@ __all__ = [
     "Outcome",
     "OrderBook",
     "OrderLevel",
+    "OrderSide",
     "Price",
     "Trade",
+    "Currency",
 ]

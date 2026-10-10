@@ -1,5 +1,13 @@
 {
-  "buy": null,
-  "sell": null,
+  "buy": {
+    "price": 0.08,
+    "raw_price": "0.9200",
+    "note": "Derived from best NO bid (ask_yes = 1 - bid_no)"
+  },
+  "sell": {
+    "price": 0.01,
+    "raw_price": "0.0100",
+    "note": "Best YES bid"
+  },
   "source": "derived_from_orderbook"
 }

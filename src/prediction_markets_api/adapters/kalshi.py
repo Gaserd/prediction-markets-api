@@ -67,24 +67,26 @@ class KalshiClient(BaseClient):
     async def list_markets(
         self,
         closed: bool | None = None,
-        limit: int = 100,
+        limit: int | None = None,
+        page_size: int = 100,
         **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets using Kalshi API cursor pagination.
 
         Args:
             closed: Filter by closed status (None = all)
-            limit: Results per page (max 200)
+            limit: Maximum total markets to return (None = unlimited)
+            page_size: Results per API request (max 200)
             **kwargs: Additional Kalshi API filters (status, series_ticker, etc.)
 
         Yields:
-            Market objects
+            Market objects (up to `limit` total)
 
         Raises:
             ValueError: If API returns invalid data
         """
         url = f"{self.API_BASE}/markets"
-        params: dict[str, Any] = {"limit": min(limit, 200)}
+        params: dict[str, Any] = {"limit": min(page_size, 200)}
 
         if closed is not None:
             # Kalshi uses status filter: "active", "closed", "settled"
@@ -95,6 +97,7 @@ class KalshiClient(BaseClient):
                 params[key] = value
 
         cursor: str | None = None
+        yielded = 0
 
         while True:
             if cursor:
@@ -112,9 +115,13 @@ class KalshiClient(BaseClient):
                 break
 
             for market_data in markets:
+                if limit is not None and yielded >= limit:
+                    return
+
                 try:
                     market = self._parse_market(market_data)
                     yield market
+                    yielded += 1
                 except (KeyError, ValueError, TypeError) as e:
                     # Log and skip markets we can't parse
                     import logging
@@ -209,19 +216,23 @@ class KalshiClient(BaseClient):
             # User wants to BUY YES -> needs best ask
             if not order_book.asks:
                 raise ValueError(f"No liquidity to buy (no asks) for {outcome_id}")
-            best_price = order_book.asks[0].price
+            best_level = order_book.asks[0]
+            best_price = best_level.price
+            raw_price = best_level.raw_price
         else:
             # User wants to SELL YES -> needs best bid
             if not order_book.bids:
                 raise ValueError(f"No liquidity to sell (no bids) for {outcome_id}")
-            best_price = order_book.bids[0].price
+            best_level = order_book.bids[0]
+            best_price = best_level.price
+            raw_price = best_level.raw_price
 
         return Price(
             outcome_id=outcome_id,
             market_id=outcome_id,
             side=side,
             price=best_price,
-            raw_price=None,  # Would be in cents from raw book
+            raw_price=raw_price,
             timestamp=datetime.now(timezone.utc),
             currency=Currency.USD,
         )
@@ -367,25 +378,63 @@ class KalshiClient(BaseClient):
         status = data.get("status", "")
         resolved = status in ("closed", "settled")
 
-        # Volume in USD cents -> convert to dollars
+        # Volume in USD (already in dollars in new API)
         volume = None
-        if "volume" in data:
-            volume = Decimal(str(data["volume"])) / Decimal("100")
+        volume_raw = data.get("volume")
+        if volume_raw is not None:
+            try:
+                # volume is already in dollars in fractional pricing API
+                volume = Decimal(str(volume_raw))
+            except (ValueError, TypeError):
+                pass
 
-        # Liquidity (open interest) in cents
+        # Open interest - use open_interest_fp (in contracts)
+        # This is the total number of contracts outstanding
+        open_interest = None
+        if "open_interest_fp" in data and data["open_interest_fp"] is not None:
+            try:
+                open_interest = Decimal(str(data["open_interest_fp"]))
+            except (ValueError, TypeError):
+                pass
+        elif "open_interest" in data and data["open_interest"] is not None:
+            try:
+                # Old field was also in contracts
+                open_interest = Decimal(str(data["open_interest"]))
+            except (ValueError, TypeError):
+                pass
+
+        # Best bid/ask sizes from top-of-book
+        best_bid_size = None
+        if "yes_bid_size_fp" in data and data["yes_bid_size_fp"] is not None:
+            try:
+                best_bid_size = Decimal(str(data["yes_bid_size_fp"]))
+            except (ValueError, TypeError):
+                pass
+
+        best_ask_size = None
+        if "yes_ask_size_fp" in data and data["yes_ask_size_fp"] is not None:
+            try:
+                best_ask_size = Decimal(str(data["yes_ask_size_fp"]))
+            except (ValueError, TypeError):
+                pass
+
+        # Liquidity: Kalshi does not provide a liquidity metric
+        # (they removed liquidity_dollars; open_interest is not liquidity)
         liquidity = None
-        if "open_interest" in data:
-            liquidity = Decimal(str(data["open_interest"])) / Decimal("100")
 
-        # Kalshi has yes/no outcomes; prices in cents (0-100)
+        # Kalshi has yes/no outcomes
+        # Use top-of-book prices: yes_bid_dollars, no_bid_dollars, etc.
         outcomes: list[Outcome] = []
-        yes_bid = data.get("yes_bid")
-        no_bid = data.get("no_bid")
 
-        # YES outcome
+        # YES outcome - use yes_bid_dollars (price to sell YES)
         yes_price = None
-        if yes_bid is not None:
-            yes_price = Decimal(str(yes_bid)) / Decimal("100")
+        yes_raw = None
+        if "yes_bid_dollars" in data and data["yes_bid_dollars"] is not None:
+            yes_raw = data["yes_bid_dollars"]
+            try:
+                yes_price = Decimal(str(yes_raw))
+            except (ValueError, TypeError):
+                pass
 
         outcomes.append(
             Outcome(
@@ -393,14 +442,19 @@ class KalshiClient(BaseClient):
                 market_id=ticker,
                 name="Yes",
                 price=yes_price,
-                raw_price=yes_bid,
+                raw_price=yes_raw,
             )
         )
 
-        # NO outcome (complementary)
+        # NO outcome - use no_bid_dollars (price to sell NO)
         no_price = None
-        if no_bid is not None:
-            no_price = Decimal(str(no_bid)) / Decimal("100")
+        no_raw = None
+        if "no_bid_dollars" in data and data["no_bid_dollars"] is not None:
+            no_raw = data["no_bid_dollars"]
+            try:
+                no_price = Decimal(str(no_raw))
+            except (ValueError, TypeError):
+                pass
 
         outcomes.append(
             Outcome(
@@ -408,7 +462,7 @@ class KalshiClient(BaseClient):
                 market_id=ticker,
                 name="No",
                 price=no_price,
-                raw_price=no_bid,
+                raw_price=no_raw,
             )
         )
 
@@ -422,7 +476,10 @@ class KalshiClient(BaseClient):
             end_date=end_date,
             resolved=resolved,
             volume=volume,
-            liquidity=liquidity,
+            open_interest=open_interest,
+            best_bid_size=best_bid_size,
+            best_ask_size=best_ask_size,
+            liquidity=liquidity,  # None for Kalshi
             currency=Currency.USD,
             raw_data=data,
             partial=False,
@@ -433,50 +490,62 @@ class KalshiClient(BaseClient):
 
         Kalshi returns YES bids and NO bids in the orderbook_fp field.
         Arrays are [[price_dollars, size], ...].
+
+        Important: YES bids are sorted descending (best first),
+        but NO bids are sorted ASCENDING (worst first, best last).
+
         We derive YES asks from NO bids using: ask_yes = 1 - bid_no.
+        The best NO bid (highest price, last in array) gives the best YES ask.
         """
         orderbook = data.get("orderbook_fp", data.get("orderbook", {}))
 
-        # YES bids (people buying YES) - prices in dollars (0.00 to 1.00)
+        # YES bids (people buying YES) - sorted descending (best first)
         yes_bids = []
         for level in orderbook.get("yes_dollars", orderbook.get("yes", [])):
             if not level or len(level) < 2:
                 continue
-            price_dollars = level[0]
+            # Prices come as strings like '0.1600'
+            price_dollars = Decimal(str(level[0]))
             size_contracts = level[1]
 
             yes_bids.append(
                 OrderLevel(
-                    price=Decimal(str(price_dollars)),
+                    price=price_dollars,
                     size=Decimal(str(size_contracts)),
-                    raw_price=price_dollars,
+                    raw_price=str(level[0]),
                 )
             )
 
-        # Sort bids descending
+        # YES bids should already be sorted descending, but ensure it
         yes_bids.sort(key=lambda x: x.price, reverse=True)
 
         # NO bids -> convert to YES asks
-        # If someone bids $X for NO, that's equivalent to asking $(1-X) for YES
+        # NO bids are sorted ASCENDING (worst first), so we need to reverse
+        # to get best bids first, then convert to YES asks
+        no_bids_raw = orderbook.get("no_dollars", orderbook.get("no", []))
+
+        # Reverse to get best NO bids first (highest prices)
         yes_asks = []
-        for level in orderbook.get("no_dollars", orderbook.get("no", [])):
+        for level in reversed(no_bids_raw):
             if not level or len(level) < 2:
                 continue
-            price_dollars_no = level[0]
+            # Prices come as strings like '0.1600'
+            price_dollars_no = Decimal(str(level[0]))
             size_contracts = level[1]
 
-            # Convert NO bid to YES ask
-            price_dollars_yes = 1.0 - price_dollars_no
+            # Convert NO bid to YES ask: if someone bids $X for NO,
+            # that's equivalent to asking $(1-X) for YES
+            price_dollars_yes = Decimal("1.0") - price_dollars_no
 
             yes_asks.append(
                 OrderLevel(
-                    price=Decimal(str(price_dollars_yes)),
+                    price=price_dollars_yes,
                     size=Decimal(str(size_contracts)),
-                    raw_price=price_dollars_yes,
+                    raw_price=str(level[0]),  # Store original NO price
                 )
             )
 
-        # Sort asks ascending
+        # Sort asks ascending (best ask = lowest price first)
         yes_asks.sort(key=lambda x: x.price)
 
         return OrderBook(

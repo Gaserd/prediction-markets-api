@@ -3,95 +3,54 @@
   "markets": [
     {
       "can_close_early": true,
-      "close_time": "2026-10-15T19:00:00Z",
-      "created_time": "2026-10-09T13:58:18.923605Z",
+      "close_time": "2099-01-08T15:00:00Z",
+      "created_time": "2026-06-29T19:31:47.73165Z",
       "custom_strike": {
-        "Associated Events": "KXDIMAYORGAME-26OCT09OCLLA,KXLALIGAGAME-26OCT10BARGET,KXLIGUE1GAME-26OCT10PSGMAN,KXUCLGAME-26OCT13GALBAR,KXUCLGAME-26OCT13VIKBMU",
-        "Associated Market Sides": "yes,yes,yes,yes,yes",
-        "Associated Markets": "KXDIMAYORGAME-26OCT09OCLLA-OC,KXLALIGAGAME-26OCT10BARGET-BAR,KXLIGUE1GAME-26OCT10PSGMAN-PSG,KXUCLGAME-26OCT13GALBAR-BAR,KXUCLGAME-26OCT13VIKBMU-BMU",
-        "Multivariate Event Ticker": "KXMVECROSSCATEGORY-S202635994402BC3"
+        "Holder": "Klaus Iohannis"
       },
-      "event_ticker": "KXMVECROSSCATEGORY-S202635994402BC3",
-      "exchange_index": 1,
-      "expected_expiration_time": "2026-10-14T01:00:00Z",
-      "expiration_time": "2026-10-15T19:00:00Z",
+      "event_ticker": "KXNEXTNATOSECGEN-99",
+      "exchange_index": 0,
+      "expected_expiration_time": "2099-01-08T15:00:00Z",
+      "expiration_time": "2099-01-08T15:00:00Z",
       "expiration_value": "",
-      "is_provisional": true,
-      "last_price_dollars": "0.0000",
-      "latest_expiration_time": "2026-10-15T19:00:00Z",
+      "last_price_dollars": "0.0800",
+      "latest_expiration_time": "2099-01-08T15:00:00Z",
       "market_type": "binary",
-      "mve_collection_ticker": "KXMVECROSSCATEGORY-R",
-      "mve_selected_legs": [
-        {
-          "event_ticker": "KXDIMAYORGAME-26OCT09OCLLA",
-          "market_ticker": "KXDIMAYORGAME-26OCT09OCLLA-OC",
-          "side": "yes"
-        },
-        {
-          "event_ticker": "KXLALIGAGAME-26OCT10BARGET",
-          "market_ticker": "KXLALIGAGAME-26OCT10BARGET-BAR",
-          "side": "yes"
-        },
-        {
-          "event_ticker": "KXLIGUE1GAME-26OCT10PSGMAN",
-          "market_ticker": "KXLIGUE1GAME-26OCT10PSGMAN-PSG",
-          "side": "yes"
-        },
-        {
-          "event_ticker": "KXUCLGAME-26OCT13GALBAR",
-          "market_ticker": "KXUCLGAME-26OCT13GALBAR-BAR",
-          "side": "yes"
-        },
-        {
-          "event_ticker": "KXUCLGAME-26OCT13VIKBMU",
-          "market_ticker": "KXUCLGAME-26OCT13VIKBMU-BMU",
-          "side": "yes"
-        }
-      ],
-      "no_ask_dollars": "1.0000",
-      "no_bid_dollars": "1.0000",
-      "no_sub_title": "yes Once Caldas,yes Barcelona,yes PSG,yes Barcelona,yes Bayern Munich",
+      "no_ask_dollars": "0.9900",
+      "no_bid_dollars": "0.9200",
+      "no_sub_title": "Klaus Iohannis",
       "notional_value_dollars": "1.0000",
-      "open_interest_fp": "0.00",
-      "open_time": "2026-10-09T13:58:18Z",
-      "previous_price_dollars": "0.0000",
-      "previous_yes_ask_dollars": "0.0000",
-      "previous_yes_bid_dollars": "0.0000",
-      "price_level_structure": "center_deci_edge_centi_cent",
+      "occurrence_datetime": "2099-01-01T15:00:00Z",
+      "open_interest_fp": "90.00",
+      "open_time": "2026-06-29T19:47:00Z",
+      "previous_price_dollars": "0.0800",
+      "previous_yes_ask_dollars": "0.0800",
+      "previous_yes_bid_dollars": "0.0100",
+      "price_level_structure": "linear_cent",
       "price_ranges": [
         {
-          "end": "0.0100",
-          "start": "0.0000",
-          "step": "0.0001"
-        },
-        {
-          "end": "0.9900",
-          "start": "0.0100",
-          "step": "0.0010"
-        },
-        {
           "end": "1.0000",
-          "start": "0.9900",
-          "step": "0.0001"
+          "start": "0.0000",
+          "step": "0.0100"
         }
       ],
       "result": "",
-      "rules_primary": "",
-      "rules_secondary": "Kalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+      "rules_primary": "If Klaus Iohannis formally holds the position of Secretary General of NATO, and is the first such subject to do so after Issuance, then the market resolves to Yes.",
+      "rules_secondary": "For the purposes of this Contract, \"formally holds Secretary General of NATO\" means that an individual, company, or group has assumed Secretary General of NATO in an official capacity\u2014whether by appointment, election, succession, confirmation, designation, or acting/interim assignment\u2014and has performed or is recognized to perform the duties or responsibilities of that role for any length of time after Issuance.",
       "settlement_bounds_type": "default",
-      "settlement_timer_seconds": 5,
+      "settlement_timer_seconds": 1800,
       "status": "active",
       "strike_type": "custom",
-      "ticker": "KXMVECROSSCATEGORY-S202635994402BC3-DE983D4B6EB",
-      "title": "yes Once Caldas,yes Barcelona,yes PSG,yes Barcelona,yes Bayern Munich",
-      "updated_time": "2026-10-09T13:58:18.923636Z",
+      "ticker": "KXNEXTNATOSECGEN-99-KIOH",
+      "title": "Will Klaus Iohannis be the next Secretary General of NATO?",
+      "updated_time": "2026-06-29T19:47:00.786694Z",
       "volume_24h_fp": "0.00",
-      "volume_fp": "0.00",
-      "yes_ask_dollars": "0.0000",
-      "yes_ask_size_fp": "0.00",
-      "yes_bid_dollars": "0.0000",
-      "yes_bid_size_fp": "0.00",
-      "yes_sub_title": "yes Once Caldas,yes Barcelona,yes PSG,yes Barcelona,yes Bayern Munich"
+      "volume_fp": "369.36",
+      "yes_ask_dollars": "0.0800",
+      "yes_ask_size_fp": "4.46",
+      "yes_bid_dollars": "0.0100",
+      "yes_bid_size_fp": "250.00",
+      "yes_sub_title": "Klaus Iohannis"
     },
     {
       "can_close_early": true,

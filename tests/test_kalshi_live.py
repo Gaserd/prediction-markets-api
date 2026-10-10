@@ -7,6 +7,7 @@ from prediction_markets_api.models.base import OrderSide
 
 
 @pytest.mark.live
+@pytest.mark.timeout(30)
 @pytest.mark.asyncio
 async def test_list_markets_live():
     """Test listing real markets from Kalshi."""
@@ -14,27 +15,27 @@ async def test_list_markets_live():
         markets = []
         async for market in client.list_markets(limit=5):
             markets.append(market)
-            if len(markets) >= 3:
-                break
 
         assert len(markets) > 0
+        assert len(markets) <= 5
         assert all(m.venue == "kalshi" for m in markets)
 
-        print(f"\nFetched {len(markets)} markets:")
-        for market in markets:
-            print(f"  {market.id}: {market.question}")
+        print(f"\nFetched {len(markets)} markets")
 
 
 @pytest.mark.live
+@pytest.mark.timeout(30)
 @pytest.mark.asyncio
 async def test_get_market_live():
     """Test getting a specific market."""
     async with KalshiClient() as client:
         # Get first market
+        ticker = None
         async for market in client.list_markets(limit=1):
             ticker = market.id
             break
-        else:
+
+        if not ticker:
             pytest.skip("No markets available")
 
         # Fetch it again by ID
@@ -45,21 +46,21 @@ async def test_get_market_live():
         assert market.question
 
         print(f"\nMarket: {market.question}")
-        print(f"  ID: {market.id}")
-        print(f"  Created: {market.created_at}")
-        print(f"  Outcomes: {len(market.outcomes)}")
 
 
 @pytest.mark.live
+@pytest.mark.timeout(30)
 @pytest.mark.asyncio
 async def test_get_order_book_live():
     """Test getting order book from live API."""
     async with KalshiClient() as client:
         # Get first market
+        ticker = None
         async for market in client.list_markets(limit=1):
             ticker = market.id
             break
-        else:
+
+        if not ticker:
             pytest.skip("No markets available")
 
         # Get order book
@@ -70,30 +71,33 @@ async def test_get_order_book_live():
         print(f"  Bids: {len(book.bids)}")
         print(f"  Asks: {len(book.asks)}")
 
-        if book.bids:
-            print(f"  Best bid: {book.bids[0].price}")
-        if book.asks:
-            print(f"  Best ask: {book.asks[0].price}")
-
 
 @pytest.mark.live
+@pytest.mark.timeout(30)
 @pytest.mark.asyncio
 async def test_get_price_live():
     """Test getting best price from live API."""
     async with KalshiClient() as client:
-        # Find a market with liquidity
+        # Find a market with liquidity (scan max 20)
         ticker_with_liquidity = None
-        async for market in client.list_markets(limit=20):
+        scanned = 0
+        max_scan = 20
+
+        async for market in client.list_markets(limit=max_scan):
+            scanned += 1
+            if scanned > max_scan:
+                break
+
             try:
                 book = await client.get_order_book(market.id)
                 if book.bids or book.asks:
                     ticker_with_liquidity = market.id
                     break
-            except Exception:
+            except ValueError:
                 continue
 
         if not ticker_with_liquidity:
-            pytest.skip("No markets with liquidity found")
+            pytest.skip(f"No markets with liquidity found in {max_scan} markets")
 
         # Get prices
         buy_price = None
@@ -116,15 +120,18 @@ async def test_get_price_live():
 
 
 @pytest.mark.live
+@pytest.mark.timeout(30)
 @pytest.mark.asyncio
 async def test_get_trades_live():
     """Test getting historical trades."""
     async with KalshiClient() as client:
         # Get first market
+        ticker = None
         async for market in client.list_markets(limit=1):
             ticker = market.id
             break
-        else:
+
+        if not ticker:
             pytest.skip("No markets available")
 
         # Get trades (may be empty)
@@ -137,5 +144,3 @@ async def test_get_trades_live():
             pass
 
         print(f"\nFetched {len(trades)} trades for {ticker}")
-        if trades:
-            print(f"  Latest: {trades[0].timestamp} - {trades[0].side.value} @ {trades[0].price}")

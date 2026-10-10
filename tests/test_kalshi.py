@@ -50,6 +50,28 @@ async def test_list_markets(respx_mock):
 
 
 @pytest.mark.asyncio
+async def test_list_markets_respects_limit(respx_mock):
+    """Test that list_markets respects the limit parameter."""
+    # Create a response with many markets
+    markets_data = load_fixture("markets_response.json")
+    # Make sure we have at least 5 markets in the fixture
+    while len(markets_data["markets"]) < 5:
+        markets_data["markets"].append(markets_data["markets"][0].copy())
+
+    respx_mock.get(
+        "https://api.elections.kalshi.com/trade-api/v2/markets"
+    ).mock(return_value=httpx.Response(200, json=markets_data))
+
+    # Test limit=2
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(limit=2):
+            markets.append(market)
+
+    assert len(markets) <= 2
+
+
+@pytest.mark.asyncio
 async def test_get_market(respx_mock):
     """Test getting a specific market."""
     markets_data = load_fixture("markets_response.json")
@@ -107,9 +129,15 @@ async def test_get_price(respx_mock):
     ).mock(return_value=httpx.Response(200, json=orderbook_data))
 
     async with KalshiClient() as client:
-        # For empty book, should raise ValueError
-        with pytest.raises(ValueError, match="No liquidity"):
-            await client.get_price(ticker, OrderSide.BUY)
+        # Get prices from the order book
+        buy_price = await client.get_price(ticker, OrderSide.BUY)
+        sell_price = await client.get_price(ticker, OrderSide.SELL)
+
+        # Verify prices exist and have raw_price
+        assert buy_price.price > Decimal("0")
+        assert sell_price.price > Decimal("0")
+        assert buy_price.raw_price is not None
+        assert sell_price.raw_price is not None
 
 
 @pytest.mark.asyncio
@@ -199,3 +227,39 @@ async def test_max_order_size_limit():
                 size=Decimal("200"),  # Exceeds limit
                 price=Decimal("0.5"),
             )
+
+
+@pytest.mark.asyncio
+async def test_price_matches_order_book_top(respx_mock):
+    """Test that get_price matches the top of the order book.
+
+    Fixtures recorded back-to-back from the same market.
+    """
+    markets_data = load_fixture("markets_response.json")
+    ticker = markets_data["markets"][0]["ticker"]
+    orderbook_data = load_fixture("orderbook_response.json")
+    prices_data = load_fixture("prices_response.json")
+
+    respx_mock.get(
+        f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}/orderbook"
+    ).mock(return_value=httpx.Response(200, json=orderbook_data))
+
+    async with KalshiClient() as client:
+        book = await client.get_order_book(ticker)
+
+        # Get prices from order book
+        if book.bids:
+            sell_price_from_book = book.bids[0].price
+            sell_price = await client.get_price(ticker, OrderSide.SELL)
+            assert sell_price.price == sell_price_from_book
+            # Verify against fixture
+            if prices_data.get("sell"):
+                assert float(sell_price.price) == prices_data["sell"]["price"]
+
+        if book.asks:
+            buy_price_from_book = book.asks[0].price
+            buy_price = await client.get_price(ticker, OrderSide.BUY)
+            assert buy_price.price == buy_price_from_book
+            # Verify against fixture
+            if prices_data.get("buy"):
+                assert float(buy_price.price) == prices_data["buy"]["price"]

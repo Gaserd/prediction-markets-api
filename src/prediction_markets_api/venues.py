@@ -39,6 +39,7 @@ class VenueInfo:
     can_trade: bool
     status: VenueStatus
     signup_link_key: str
+    liquidity_source: str | None  # Venue field that maps to Market.liquidity, or None
 
 
 # Venue registry
@@ -55,6 +56,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,  # Stub only in current version
         status=VenueStatus.IMPLEMENTED,
         signup_link_key="polymarket",
+        liquidity_source="liquidityNum",  # Polymarket provides liquidity metric
     ),
     "kalshi": VenueInfo(
         name="Kalshi",
@@ -66,6 +68,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.IMPLEMENTED,
         signup_link_key="kalshi",
+        liquidity_source=None,  # Kalshi does not provide liquidity metric
     ),
     "limitless": VenueInfo(
         name="Limitless",
@@ -77,6 +80,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="limitless",
+        liquidity_source=None,  # Unknown until implemented
     ),
     # Wave 2
     "hyperliquid": VenueInfo(
@@ -89,6 +93,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="hyperliquid",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "predict_fun": VenueInfo(
         name="Predict.fun",
@@ -100,6 +105,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="predict_fun",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "opinion": VenueInfo(
         name="Opinion",
@@ -111,6 +117,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="opinion",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "pascal": VenueInfo(
         name="Pascal",
@@ -122,6 +129,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="pascal",
+        liquidity_source=None,  # Unknown until implemented
     ),
     # Wave 3
     "sx_bet": VenueInfo(
@@ -134,6 +142,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="sx_bet",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "azuro": VenueInfo(
         name="Azuro/Bookmaker.xyz",
@@ -145,6 +154,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="azuro",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "jupiter": VenueInfo(
         name="Jupiter Prediction",
@@ -156,6 +166,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="jupiter",
+        liquidity_source=None,  # Unknown until implemented
     ),
     # Wave 4
     "polymarket_us": VenueInfo(
@@ -168,6 +179,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="polymarket_us",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "novig": VenueInfo(
         name="Novig",
@@ -179,6 +191,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="novig",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "world": VenueInfo(
         name="World",
@@ -190,6 +203,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="world",
+        liquidity_source=None,  # Unknown until implemented
     ),
     "betdex": VenueInfo(
         name="BetDEX",
@@ -201,6 +215,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.PLANNED,
         signup_link_key="betdex",
+        liquidity_source=None,  # Unknown until implemented
     ),
 }
 
