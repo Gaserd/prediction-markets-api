@@ -199,6 +199,9 @@ class KalshiClient(BaseClient):
         - get_price(BUY) returns the best ask (what a buyer pays to buy YES)
         - get_price(SELL) returns the best bid (what a seller receives selling YES)
 
+        Note: For the derived YES ask price, raw_price holds the original raw NO bid string
+        from the Kalshi API (before the 1 - p transformation).
+
         Args:
             outcome_id: Kalshi ticker
             side: OrderSide.BUY (user buying YES) or OrderSide.SELL (user selling YES)
