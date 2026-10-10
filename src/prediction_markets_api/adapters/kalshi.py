@@ -64,11 +64,12 @@ class KalshiClient(BaseClient):
         self._api_key: str | None = os.getenv("KALSHI_API_KEY")
         self._api_secret: str | None = os.getenv("KALSHI_API_SECRET")
 
-    async def list_markets(
+    async def list_markets(  # type: ignore[override]
         self,
         closed: bool | None = None,
         limit: int | None = None,
         page_size: int = 100,
+        include_multivariate: bool = False,
         **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets using Kalshi API cursor pagination.
@@ -77,6 +78,9 @@ class KalshiClient(BaseClient):
             closed: Filter by closed status (None = all)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 200)
+            include_multivariate: Include multivariate combo markets (KXMVE*). Default False
+                to exclude them via server-side mve_filter=exclude, as they flood listings
+                and often 404 on direct GET.
             **kwargs: Additional Kalshi API filters (status, series_ticker, etc.)
 
         Yields:
@@ -91,6 +95,10 @@ class KalshiClient(BaseClient):
         if closed is not None:
             # Kalshi uses status filter: "active", "closed", "settled"
             params["status"] = "closed" if closed else "active"
+
+        # Exclude multivariate combo markets by default (server-side filter)
+        if not include_multivariate:
+            params["mve_filter"] = "exclude"
 
         for key, value in kwargs.items():
             if value is not None:

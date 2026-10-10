@@ -80,7 +80,7 @@ VENUES: dict[str, VenueInfo] = {
         can_trade=False,
         status=VenueStatus.IMPLEMENTED,
         signup_link_key="limitless",
-        liquidity_source="liquidityFormatted",  # Limitless provides liquidity metric
+        liquidity_source=None,  # Limitless does not provide a liquidity metric (absent on ~75% of markets)
     ),
     # Wave 2
     "hyperliquid": VenueInfo(

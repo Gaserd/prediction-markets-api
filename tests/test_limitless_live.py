@@ -1,9 +1,19 @@
 """Live tests for Limitless adapter (opt-in with -m live)."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from prediction_markets_api import LimitlessClient
-from prediction_markets_api.models.base import OrderSide
+from prediction_markets_api.models.base import Market, OrderSide
+
+
+def _is_market_stable(market: Market) -> bool:
+    """Check if market expires at least 1 hour away (to avoid 5/15-min markets closing mid-test)."""
+    if market.end_date is None:
+        return True
+    now = datetime.now(timezone.utc)
+    return market.end_date > now + timedelta(hours=1)
 
 
 @pytest.mark.live
@@ -29,14 +39,21 @@ async def test_list_markets_live():
 async def test_get_market_live():
     """Test getting a specific market."""
     async with LimitlessClient() as client:
-        # Get first market
+        # Get first stable market (expires at least 1 hour away)
         slug = None
-        async for market in client.list_markets(limit=1):
-            slug = market.id
-            break
+        scanned = 0
+        max_scan = 20
+
+        async for market in client.list_markets(limit=max_scan):
+            scanned += 1
+            if scanned > max_scan:
+                break
+            if _is_market_stable(market):
+                slug = market.id
+                break
 
         if not slug:
-            pytest.skip("No markets available")
+            pytest.skip("No stable markets available")
 
         # Fetch it again by ID
         market = await client.get_market(slug)
@@ -54,7 +71,7 @@ async def test_get_market_live():
 async def test_get_order_book_live():
     """Test getting order book from live API."""
     async with LimitlessClient() as client:
-        # Find a CLOB market (scan max 20)
+        # Find a stable CLOB market (scan max 20)
         clob_slug = None
         scanned = 0
         max_scan = 20
@@ -63,6 +80,9 @@ async def test_get_order_book_live():
             scanned += 1
             if scanned > max_scan:
                 break
+
+            if not _is_market_stable(market):
+                continue
 
             try:
                 book = await client.get_order_book(market.id)
@@ -73,7 +93,7 @@ async def test_get_order_book_live():
                 continue
 
         if not clob_slug:
-            pytest.skip(f"No CLOB markets found in {max_scan} markets")
+            pytest.skip(f"No stable CLOB markets found in {max_scan} markets")
 
         # Get order book
         book = await client.get_order_book(clob_slug)
@@ -90,7 +110,7 @@ async def test_get_order_book_live():
 async def test_get_price_live():
     """Test getting best price from live API."""
     async with LimitlessClient() as client:
-        # Find a market with liquidity (scan max 20)
+        # Find a stable market with liquidity (scan max 20)
         slug_with_liquidity = None
         scanned = 0
         max_scan = 20
@@ -99,6 +119,9 @@ async def test_get_price_live():
             scanned += 1
             if scanned > max_scan:
                 break
+
+            if not _is_market_stable(market):
+                continue
 
             try:
                 book = await client.get_order_book(market.id)
@@ -109,7 +132,7 @@ async def test_get_price_live():
                 continue
 
         if not slug_with_liquidity:
-            pytest.skip(f"No markets with liquidity found in {max_scan} markets")
+            pytest.skip(f"No stable markets with liquidity found in {max_scan} markets")
 
         # Get prices
         buy_price = None
@@ -137,7 +160,7 @@ async def test_get_price_live():
 async def test_get_price_matches_book_live():
     """Test that get_price matches top of book on live data."""
     async with LimitlessClient() as client:
-        # Find a market with orders on both sides (scan max 20)
+        # Find a stable market with orders on both sides (scan max 20)
         slug_with_both_sides = None
         scanned = 0
         max_scan = 20
@@ -146,6 +169,9 @@ async def test_get_price_matches_book_live():
             scanned += 1
             if scanned > max_scan:
                 break
+
+            if not _is_market_stable(market):
+                continue
 
             try:
                 book = await client.get_order_book(market.id)
@@ -156,7 +182,7 @@ async def test_get_price_matches_book_live():
                 continue
 
         if not slug_with_both_sides:
-            pytest.skip(f"No markets with orders on both sides found in {max_scan} markets")
+            pytest.skip(f"No stable markets with orders on both sides found in {max_scan} markets")
 
         # Get book and prices back-to-back
         book = await client.get_order_book(slug_with_both_sides)
@@ -182,14 +208,21 @@ async def test_get_price_matches_book_live():
 async def test_get_trades_live():
     """Test getting historical trades."""
     async with LimitlessClient() as client:
-        # Get first market
+        # Get first stable market
         slug = None
-        async for market in client.list_markets(limit=1):
-            slug = market.id
-            break
+        scanned = 0
+        max_scan = 20
+
+        async for market in client.list_markets(limit=max_scan):
+            scanned += 1
+            if scanned > max_scan:
+                break
+            if _is_market_stable(market):
+                slug = market.id
+                break
 
         if not slug:
-            pytest.skip("No markets available")
+            pytest.skip("No stable markets available")
 
         # Get trades (may be empty)
         trades = []

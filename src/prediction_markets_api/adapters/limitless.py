@@ -6,6 +6,7 @@ Limitless-specific semantics:
 - Order books show YES side (bids descending, asks ascending)
 - Markets identified by slug (e.g., btc-hourly-price)
 - Built on Base (L2)
+- Liquidity metric not provided by the API (absent on ~75% of markets)
 """
 
 import os
@@ -378,14 +379,6 @@ class LimitlessClient(BaseClient):
             except (ValueError, TypeError):
                 pass
 
-        liquidity = None
-        liq_str = data.get("liquidityFormatted")
-        if liq_str:
-            try:
-                liquidity = Decimal(str(liq_str))
-            except (ValueError, TypeError):
-                pass
-
         outcomes: list[Outcome] = []
         prices = data.get("prices", [])
 
@@ -439,7 +432,7 @@ class LimitlessClient(BaseClient):
             open_interest=open_interest,
             best_bid_size=None,
             best_ask_size=None,
-            liquidity=liquidity,
+            liquidity=None,  # Limitless does not provide liquidity metric
             currency=Currency.USDC,
             raw_data=data,
             partial=False,
