@@ -66,7 +66,6 @@ class PolymarketClient(BaseClient):
         limit: int | None = None,
         page_size: int = 100,
         venue_params: dict[str, Any] | None = None,
-        **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets using Gamma API keyset pagination.
 
@@ -75,7 +74,6 @@ class PolymarketClient(BaseClient):
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (1-100)
             venue_params: Venue-specific parameters as a dict (optional, unused by Polymarket)
-            **kwargs: Additional Gamma API filters (volume_num_min, etc.)
 
         Yields:
             Market objects (up to `limit` total)
@@ -88,10 +86,6 @@ class PolymarketClient(BaseClient):
 
         if closed is not None:
             params["closed"] = str(closed).lower()
-
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
 
         cursor: str | None = None
         yielded = 0

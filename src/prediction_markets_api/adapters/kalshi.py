@@ -70,7 +70,8 @@ class KalshiClient(BaseClient):
         limit: int | None = None,
         page_size: int = 100,
         venue_params: dict[str, Any] | None = None,
-        **kwargs: object,
+        *,
+        include_multivariate: bool = False,
     ) -> AsyncIterator[Market]:
         """List markets using Kalshi API cursor pagination.
 
@@ -79,11 +80,9 @@ class KalshiClient(BaseClient):
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 200)
             venue_params: Venue-specific parameters as a dict (optional, unused by Kalshi)
-            **kwargs: Additional Kalshi API filters. Supported kwargs:
-                - include_multivariate (bool): Include multivariate combo markets (KXMVE*).
-                  Default False to exclude them via server-side mve_filter=exclude, as they
-                  flood listings and often 404 on direct GET. Kalshi-specific.
-                - Other filters: status, series_ticker, etc.
+            include_multivariate: Include multivariate combo markets (KXMVE*). Default False
+                to exclude them via server-side mve_filter=exclude, as they flood listings
+                and often 404 on direct GET. Kalshi-specific keyword-only parameter.
 
         Yields:
             Market objects (up to `limit` total)
@@ -91,9 +90,6 @@ class KalshiClient(BaseClient):
         Raises:
             ValueError: If API returns invalid data
         """
-        # Extract Kalshi-specific parameter from kwargs
-        include_multivariate = bool(kwargs.pop("include_multivariate", False))
-
         url = f"{self.API_BASE}/markets"
         params: dict[str, Any] = {"limit": min(page_size, 200)}
 
@@ -104,10 +100,6 @@ class KalshiClient(BaseClient):
         # Exclude multivariate combo markets by default (server-side filter)
         if not include_multivariate:
             params["mve_filter"] = "exclude"
-
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
 
         cursor: str | None = None
         yielded = 0

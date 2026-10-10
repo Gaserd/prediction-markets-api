@@ -332,3 +332,12 @@ async def test_list_markets_returns_exact_limit(respx_mock):
 
     # Should only make one API request (no pagination needed)
     assert route.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_markets_rejects_unknown_kwargs():
+    """Test that passing an unknown keyword argument raises TypeError."""
+    async with KalshiClient() as client:
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            async for _ in client.list_markets(unknown_param="value"):
+                pass

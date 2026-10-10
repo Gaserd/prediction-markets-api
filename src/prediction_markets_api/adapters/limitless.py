@@ -70,7 +70,6 @@ class LimitlessClient(BaseClient):
         limit: int | None = None,
         page_size: int = 25,
         venue_params: dict[str, Any] | None = None,
-        **kwargs: object,
     ) -> AsyncIterator[Market]:
         """List markets using Limitless API page pagination.
 
@@ -79,7 +78,6 @@ class LimitlessClient(BaseClient):
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 25)
             venue_params: Venue-specific parameters as a dict (optional, unused by Limitless)
-            **kwargs: Additional Limitless API filters (tradeType, automationType, etc.)
 
         Yields:
             Market objects (up to `limit` total)
@@ -89,10 +87,6 @@ class LimitlessClient(BaseClient):
         """
         url = f"{self.API_BASE}/markets/active"
         params: dict[str, Any] = {"limit": min(page_size, 25)}
-
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
 
         page = 1
         yielded = 0
