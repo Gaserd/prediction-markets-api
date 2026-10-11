@@ -380,10 +380,10 @@ async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_cl
     data = fixtures["orderbook_response"]["data"]
     meta = fixtures["orderbook_response"]["meta"]
 
-    # Extract outcome_id (token_id for Polymarket, ticker for Kalshi)
+    # Extract outcome_id (token_id for Polymarket, ticker for Kalshi, market_id for Limitless)
     outcome_id = None
     if meta:
-        outcome_id = meta.get("token_id") or meta.get("ticker")
+        outcome_id = meta.get("token_id") or meta.get("ticker") or meta.get("market_id")
     if not outcome_id and "asset_id" in data:
         outcome_id = data["asset_id"]
 
@@ -393,6 +393,10 @@ async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_cl
     with respx.mock:
         # Mock the appropriate endpoint for each adapter
         if adapter_config.name == "kalshi":
+            respx.get(url__regex=r".*/orderbook.*").mock(
+                return_value=Response(200, json=data)
+            )
+        elif adapter_config.name == "limitless":
             respx.get(url__regex=r".*/orderbook.*").mock(
                 return_value=Response(200, json=data)
             )
@@ -484,10 +488,14 @@ async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, ada
     orderbook_data = fixtures["orderbook_response"]["data"]
     orderbook_meta = fixtures["orderbook_response"]["meta"]
 
-    # Extract outcome_id (token_id for Polymarket, ticker for Kalshi)
+    # Extract outcome_id (token_id for Polymarket, ticker for Kalshi, market_id for Limitless)
     outcome_id = None
     if orderbook_meta:
-        outcome_id = orderbook_meta.get("token_id") or orderbook_meta.get("ticker")
+        outcome_id = (
+            orderbook_meta.get("token_id")
+            or orderbook_meta.get("ticker")
+            or orderbook_meta.get("market_id")
+        )
     if not outcome_id and "asset_id" in orderbook_data:
         outcome_id = orderbook_data["asset_id"]
 
@@ -495,13 +503,18 @@ async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, ada
         pytest.skip(f"Cannot determine outcome_id for {adapter_config.name}")
 
     with respx.mock:
-        # Mock order book endpoint for both get_order_book and Kalshi's get_price
+        # Mock order book endpoint for both get_order_book and get_price where applicable
         if adapter_config.name == "polymarket":
             respx.get(url__regex=r".*/book.*").mock(
                 return_value=Response(200, json=orderbook_data)
             )
         elif adapter_config.name == "kalshi":
             # Kalshi uses /orderbook for both get_order_book and get_price
+            respx.get(url__regex=r".*/orderbook.*").mock(
+                return_value=Response(200, json=orderbook_data)
+            )
+        elif adapter_config.name == "limitless":
+            # Limitless uses /orderbook for both get_order_book and get_price
             respx.get(url__regex=r".*/orderbook.*").mock(
                 return_value=Response(200, json=orderbook_data)
             )
@@ -724,27 +737,41 @@ def test_fixture_hygiene(adapter_config, adapter_fixtures):
             pytest.fail(f"Invalid ISO-8601 timestamp in {meta_file.name}: {recorded_at_str} - {e}")
 
         # Support multiple formats:
-        # 1. 'request': {url, method} - single nested request
-        # 2. 'requests': [{url, method}, ...] - multiple nested requests
+        # 1. 'request': {url, method} - single nested object (Polymarket)
+        # 2. 'requests': [{url, method}, ...] - multiple nested objects
         # 3. Top-level url and method - Kalshi format
+        # 4. 'request': "METHOD /path" - string format (Limitless)
 
         has_request_info = False
 
-        if "request" in meta or "requests" in meta:
-            # Nested format (Polymarket)
+        if "request" in meta:
+            request = meta["request"]
+            if isinstance(request, str):
+                # String format: "GET /path" (Limitless)
+                has_request_info = True
+                # Validate it looks like "METHOD /path"
+                parts = request.split(None, 1)
+                assert len(parts) >= 2, (
+                    f"Meta file {meta_file.name} request string must be 'METHOD /path', got: {request}"
+                )
+            elif isinstance(request, dict):
+                # Object format (Polymarket)
+                has_request_info = True
+                assert "url" in request, f"Meta file {meta_file.name} request missing 'url'"
+                assert "method" in request, f"Meta file {meta_file.name} request missing 'method'"
+        elif "requests" in meta:
+            # Multiple requests format
             has_request_info = True
-            requests = meta.get("requests") or [meta.get("request")]
-            for req in requests:
-                if req:
-                    assert "url" in req, f"Meta file {meta_file.name} request missing 'url'"
-                    assert "method" in req, f"Meta file {meta_file.name} request missing 'method'"
+            for req in meta["requests"]:
+                assert "url" in req, f"Meta file {meta_file.name} request missing 'url'"
+                assert "method" in req, f"Meta file {meta_file.name} request missing 'method'"
         elif "url" in meta and "method" in meta:
             # Top-level format (Kalshi)
             has_request_info = True
 
         assert has_request_info, (
             f"Meta file {meta_file.name} missing request info. "
-            "Expected 'request'/'requests' object(s) or top-level 'url'/'method' fields."
+            "Expected 'request' (string/object), 'requests' (array), or top-level 'url'/'method' fields."
         )
 
 
@@ -823,3 +850,93 @@ async def test_place_order_enforces_max_order_size(adapter_config):
 
     finally:
         await client.close()
+
+
+# =============================================================================
+# CONTRACT 12: Code quality - no type: ignore[override]
+# =============================================================================
+
+
+def test_no_type_ignore_override_in_adapters():
+    """Verify no adapter source file contains type: ignore[override].
+
+    This mypy suppression is a code smell indicating incorrect override signatures.
+    Adapters must properly implement the base interface without type suppressions.
+    """
+    from pathlib import Path
+
+    adapters_dir = Path(__file__).parent.parent.parent / "src" / "prediction_markets_api" / "adapters"
+
+    adapter_files = []
+    for f in adapters_dir.glob("*.py"):
+        if f.name not in ("__init__.py", "__pycache__"):
+            adapter_files.append(f)
+
+    assert adapter_files, "No adapter files found"
+
+    violations = []
+    for adapter_file in adapter_files:
+        with open(adapter_file) as f:
+            content = f.read()
+            if "type: ignore[override]" in content:
+                # Find line numbers
+                lines = content.split("\n")
+                for i, line in enumerate(lines, 1):
+                    if "type: ignore[override]" in line:
+                        violations.append(f"{adapter_file.name}:{i}")
+
+    assert not violations, (
+        "Found type: ignore[override] in adapter files (indicates incorrect override signature):\n"
+        + "\n".join(violations)
+    )
+
+
+# =============================================================================
+# CONTRACT 13: list_markets with unknown keyword raises TypeError
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_list_markets_unknown_keyword_raises(adapter_client):
+    """Verify list_markets with unknown keyword argument raises TypeError.
+
+    After venue_params refactor, list_markets should not accept arbitrary **kwargs.
+    Unknown keywords must raise TypeError immediately.
+    """
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        async for _ in adapter_client.list_markets(invalid_param="test"):
+            pass  # Should not reach here
+
+
+# =============================================================================
+# CONTRACT 14: place_order with unknown keyword raises TypeError
+# =============================================================================
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason="place_order still accepts **kwargs; required before trading PR merges",
+)
+async def test_place_order_unknown_keyword_raises(adapter_client):
+    """Verify place_order with unknown keyword argument raises TypeError.
+
+    place_order should not accept arbitrary **kwargs for type safety.
+    Unknown keywords must raise TypeError immediately.
+
+    Currently xfail because base/adapters still have **kwargs on main.
+    This must pass before the trading implementation PR merges.
+    """
+    from decimal import Decimal
+
+    from prediction_markets_api.models.base import OrderSide
+
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        await adapter_client.place_order(
+            outcome_id="test",
+            side=OrderSide.BUY,
+            size=Decimal("10"),
+            price=Decimal("0.5"),
+            dry_run=True,
+            invalid_param="test",
+        )
