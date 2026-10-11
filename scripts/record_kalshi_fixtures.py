@@ -148,7 +148,9 @@ async def record_fixtures():
             trades_data = trades_response.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
-                print(f"No trades endpoint for {ticker}, trying to find another market with trades...")
+                print(
+                    f"No trades endpoint for {ticker}, trying to find another market with trades..."
+                )
                 # Try a few more markets
                 found_trades = False
                 for market in markets[:5]:  # Try first 5 markets

@@ -185,6 +185,44 @@ class PolymarketClient(BaseClient):
 
         return order_book
 
+    async def get_tokens(self, token_ids: list[str]) -> list[dict[str, Any]]:
+        """Get token data for multiple tokens in batch.
+
+        Uses Data API v2 /tokens endpoint (added Oct 7, 2026).
+        Automatically chunks requests into batches of 50 tokens (API limit).
+
+        Args:
+            token_ids: List of Polymarket token_ids (any number)
+
+        Returns:
+            List of token data dictionaries for all requested tokens
+
+        Raises:
+            ValueError: If API returns invalid data or request fails
+        """
+        if not token_ids:
+            return []
+
+        results = []
+        chunk_size = 50
+
+        for i in range(0, len(token_ids), chunk_size):
+            chunk = token_ids[i : i + chunk_size]
+            url = f"{self.DATA_API_BASE}/tokens"
+            params = {"token_ids": ",".join(chunk)}
+
+            try:
+                response = await self._http_client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+            except (httpx.HTTPError, ValueError) as e:
+                raise ValueError(f"Failed to fetch tokens: {e}") from e
+
+            tokens: list[dict[str, Any]] = data.get("data", [])
+            results.extend(tokens)
+
+        return results
+
     async def get_price(self, outcome_id: str, side: OrderSide) -> Price:
         """Get best executable price for an outcome and side.
 
@@ -244,7 +282,9 @@ class PolymarketClient(BaseClient):
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
+        *,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
     ) -> AsyncIterator[Trade]:
         """Get historical trades for an outcome.
 
@@ -253,7 +293,8 @@ class PolymarketClient(BaseClient):
         Args:
             outcome_id: Polymarket token_id
             limit: Results per page
-            **kwargs: Additional filters (start_ts, end_ts, etc.)
+            start_ts: Filter trades after this Unix timestamp (seconds)
+            end_ts: Filter trades before this Unix timestamp (seconds)
 
         Yields:
             Trade objects
@@ -264,9 +305,10 @@ class PolymarketClient(BaseClient):
             "limit": limit,
         }
 
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
+        if start_ts is not None:
+            params["start_ts"] = start_ts
+        if end_ts is not None:
+            params["end_ts"] = end_ts
 
         cursor: str | None = None
 

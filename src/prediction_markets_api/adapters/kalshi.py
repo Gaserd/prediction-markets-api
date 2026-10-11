@@ -72,6 +72,8 @@ class KalshiClient(BaseClient):
         venue_params: dict[str, Any] | None = None,
         *,
         include_multivariate: bool = False,
+        series_ticker: str | None = None,
+        category: str | None = None,
     ) -> AsyncIterator[Market]:
         """List markets using Kalshi API cursor pagination.
 
@@ -83,6 +85,8 @@ class KalshiClient(BaseClient):
             include_multivariate: Include multivariate combo markets (KXMVE*). Default False
                 to exclude them via server-side mve_filter=exclude, as they flood listings
                 and often 404 on direct GET. Kalshi-specific keyword-only parameter.
+            series_ticker: Filter by series ticker (keyword-only)
+            category: Filter by category (keyword-only)
 
         Yields:
             Market objects (up to `limit` total)
@@ -100,6 +104,12 @@ class KalshiClient(BaseClient):
         # Exclude multivariate combo markets by default (server-side filter)
         if not include_multivariate:
             params["mve_filter"] = "exclude"
+
+        if series_ticker is not None:
+            params["series_ticker"] = series_ticker
+
+        if category is not None:
+            params["category"] = category
 
         cursor: str | None = None
         yielded = 0
@@ -249,14 +259,17 @@ class KalshiClient(BaseClient):
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
+        *,
+        min_ts: int | None = None,
+        max_ts: int | None = None,
     ) -> AsyncIterator[Trade]:
         """Get historical trades for an outcome.
 
         Args:
             outcome_id: Kalshi ticker
             limit: Results per page
-            **kwargs: Additional filters (min_ts, max_ts, etc.)
+            min_ts: Filter trades after this Unix timestamp (milliseconds)
+            max_ts: Filter trades before this Unix timestamp (milliseconds)
 
         Yields:
             Trade objects
@@ -266,9 +279,10 @@ class KalshiClient(BaseClient):
             "limit": limit,
         }
 
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
+        if min_ts is not None:
+            params["min_ts"] = min_ts
+        if max_ts is not None:
+            params["max_ts"] = max_ts
 
         cursor: str | None = None
 

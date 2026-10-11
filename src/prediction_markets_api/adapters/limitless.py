@@ -229,14 +229,15 @@ class LimitlessClient(BaseClient):
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
+        *,
+        page: int = 1,
     ) -> AsyncIterator[Trade]:
         """Get historical trades for an outcome.
 
         Args:
             outcome_id: Limitless slug
-            limit: Results per page
-            **kwargs: Additional filters (page, etc.)
+            limit: Results per page (max 100)
+            page: Page number for pagination
 
         Yields:
             Trade objects
@@ -244,7 +245,7 @@ class LimitlessClient(BaseClient):
         url = f"{self.API_BASE}/markets/{outcome_id}/events"
         params: dict[str, Any] = {
             "limit": min(limit, 100),
-            "page": kwargs.get("page", 1),
+            "page": page,
         }
 
         try:

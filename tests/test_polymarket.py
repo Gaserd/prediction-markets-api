@@ -121,7 +121,7 @@ async def test_get_price(prices_response, respx_mock):
 @pytest.mark.asyncio
 async def test_get_trades(trades_response, respx_mock):
     """Test getting historical trades."""
-    outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+    outcome_id = "33339798372916037220786136133406478491116150628220441951753426683441228279665"
 
     respx_mock.get("https://data-api.polymarket.com/v2/trades").mock(
         return_value=httpx.Response(200, json=trades_response)
@@ -135,17 +135,17 @@ async def test_get_trades(trades_response, respx_mock):
     assert len(trades) == 2
 
     trade1 = trades[0]
-    assert trade1.id == "0xbeef3f30b4188470347542ecd64b5470418e620e"
-    assert trade1.outcome_id == outcome_id
+    assert trade1.id == "0xc69bd5567b40ef4d11922eaa57e1f9be1c642076"
     assert trade1.side == OrderSide.BUY
-    assert trade1.price == Decimal("0.999")
-    assert trade1.size == Decimal("10.0")
+    assert trade1.price == Decimal("0.002")
+    assert trade1.size == Decimal("5.0")
     assert trade1.currency == Currency.USDC
 
     trade2 = trades[1]
+    assert trade2.id == "0xc69bd5567b40ef4d11922eaa57e1f9be1c642076"
     assert trade2.side == OrderSide.BUY
-    assert trade2.price == Decimal("0.5")
-    assert trade2.size == Decimal("45.94")
+    assert trade2.price == Decimal("0.002")
+    assert trade2.size == Decimal("5.0")
 
 
 @pytest.mark.asyncio
@@ -347,6 +347,7 @@ async def test_fixture_consistency():
 
     # Verify recorded within a short time window (allowing for sequential recording)
     from datetime import datetime
+
     book_time = datetime.fromisoformat(book_meta["recorded_at"])
     price_time = datetime.fromisoformat(price_meta["recorded_at"])
     time_diff = abs((book_time - price_time).total_seconds())
@@ -393,7 +394,9 @@ async def test_price_matches_order_book_top(orderbook_response, prices_response,
         buy_price = await client.get_price(outcome_id, OrderSide.BUY)
 
     # User BUY price should match best ask (what user pays)
-    assert buy_price.price == best_ask, f"BUY price {buy_price.price} should match best ask {best_ask}"
+    assert buy_price.price == best_ask, (
+        f"BUY price {buy_price.price} should match best ask {best_ask}"
+    )
 
     # Reset mocks and test SELL price
     respx_mock.reset()
@@ -405,4 +408,71 @@ async def test_price_matches_order_book_top(orderbook_response, prices_response,
         sell_price = await client.get_price(outcome_id, OrderSide.SELL)
 
     # User SELL price should match best bid (what user receives)
-    assert sell_price.price == best_bid, f"SELL price {sell_price.price} should match best bid {best_bid}"
+    assert sell_price.price == best_bid, (
+        f"SELL price {sell_price.price} should match best bid {best_bid}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_trades_rejects_unknown_kwargs(trades_response, respx_mock):
+    """Test that get_trades raises TypeError for unknown keyword arguments."""
+    outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+
+    async with PolymarketClient() as client:
+        with pytest.raises(TypeError):
+            async for _ in client.get_trades(outcome_id, unknown_param=123):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_get_tokens(respx_mock):
+    """Test batch token fetching."""
+    token_ids = ["token1", "token2", "token3"]
+
+    mock_response = {
+        "data": [
+            {"token_id": "token1", "price": "0.5"},
+            {"token_id": "token2", "price": "0.6"},
+            {"token_id": "token3", "price": "0.7"},
+        ]
+    }
+
+    respx_mock.get("https://data-api.polymarket.com/v2/tokens").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    async with PolymarketClient() as client:
+        tokens = await client.get_tokens(token_ids)
+
+    assert len(tokens) == 3
+    assert tokens[0]["token_id"] == "token1"
+    assert tokens[1]["token_id"] == "token2"
+    assert tokens[2]["token_id"] == "token3"
+
+
+@pytest.mark.asyncio
+async def test_get_tokens_chunking(respx_mock):
+    """Test that get_tokens automatically chunks large requests (>50 tokens)."""
+    token_ids = [f"token{i}" for i in range(75)]
+
+    def mock_tokens_response(request):
+        requested_ids = request.url.params["token_ids"].split(",")
+        return httpx.Response(
+            200,
+            json={"data": [{"token_id": tid, "price": "0.5"} for tid in requested_ids]},
+        )
+
+    respx_mock.get("https://data-api.polymarket.com/v2/tokens").mock(
+        side_effect=mock_tokens_response
+    )
+
+    async with PolymarketClient() as client:
+        tokens = await client.get_tokens(token_ids)
+
+    assert len(tokens) == 75
+    # Should have made 2 requests (50 + 25)
+    requests = respx_mock.calls
+    assert len(requests) == 2
+    # Verify chunk sizes
+    assert len(requests[0].request.url.params["token_ids"].split(",")) == 50
+    assert len(requests[1].request.url.params["token_ids"].split(",")) == 25

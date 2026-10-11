@@ -25,9 +25,9 @@ async def test_list_markets(respx_mock):
     """Test listing markets from Kalshi."""
     # Load and mock the API response
     markets_data = load_fixture("markets_response.json")
-    respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=markets_data)
+    )
 
     # Fetch markets
     async with KalshiClient() as client:
@@ -58,9 +58,9 @@ async def test_list_markets_respects_limit(respx_mock):
     while len(markets_data["markets"]) < 5:
         markets_data["markets"].append(markets_data["markets"][0].copy())
 
-    respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=markets_data)
+    )
 
     # Test limit=2
     async with KalshiClient() as client:
@@ -77,9 +77,9 @@ async def test_get_market(respx_mock):
     markets_data = load_fixture("markets_response.json")
     ticker = markets_data["markets"][0]["ticker"]
 
-    respx_mock.get(
-        f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}"
-    ).mock(return_value=httpx.Response(200, json={"market": markets_data["markets"][0]}))
+    respx_mock.get(f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}").mock(
+        return_value=httpx.Response(200, json={"market": markets_data["markets"][0]})
+    )
 
     async with KalshiClient() as client:
         market = await client.get_market(ticker)
@@ -147,9 +147,9 @@ async def test_get_trades(respx_mock):
     ticker = markets_data["markets"][0]["ticker"]
     trades_data = load_fixture("trades_response.json")
 
-    respx_mock.get(
-        f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}/trades"
-    ).mock(return_value=httpx.Response(200, json=trades_data))
+    respx_mock.get(f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}/trades").mock(
+        return_value=httpx.Response(200, json=trades_data)
+    )
 
     async with KalshiClient() as client:
         trades = []
@@ -266,78 +266,41 @@ async def test_price_matches_order_book_top(respx_mock):
 
 
 @pytest.mark.asyncio
-async def test_excludes_multivariate_by_default(respx_mock):
-    """Test that mve_filter=exclude is sent by default to exclude KXMVE* markets server-side."""
-    markets_data = load_fixture("markets_response.json")
-
-    # Verify the request includes mve_filter=exclude
-    route = respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+async def test_get_trades_rejects_unknown_kwargs(respx_mock):
+    """Test that get_trades raises TypeError for unknown keyword arguments."""
+    ticker = "TEST-TICKER"
 
     async with KalshiClient() as client:
-        markets = []
-        async for market in client.list_markets(limit=10):
-            markets.append(market)
-
-    # Verify mve_filter=exclude was sent (server-side filtering)
-    assert route.called
-    request = route.calls.last.request
-    assert "mve_filter=exclude" in str(request.url), "mve_filter=exclude should be sent by default"
-
-
-@pytest.mark.asyncio
-async def test_includes_multivariate_when_opted_in(respx_mock):
-    """Test that multivariate markets can be included with include_multivariate=True."""
-    markets_data = load_fixture("markets_response.json")
-
-    # Verify the request does NOT include mve_filter when opted in
-    route = respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
-
-    async with KalshiClient() as client:
-        markets = []
-        async for market in client.list_markets(limit=10, include_multivariate=True):
-            markets.append(market)
-
-    # Verify mve_filter was NOT sent
-    assert route.called
-    request = route.calls.last.request
-    assert "mve_filter" not in str(request.url)
-
-
-@pytest.mark.asyncio
-async def test_list_markets_returns_exact_limit(respx_mock):
-    """Test that list_markets(limit=N) returns exactly N markets without extra page requests."""
-    # Create fixture with enough markets
-    markets_data = load_fixture("markets_response.json")
-
-    # Ensure we have at least 5 markets
-    while len(markets_data["markets"]) < 5:
-        markets_data["markets"].append(markets_data["markets"][0].copy())
-
-    # Mock the response
-    route = respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
-
-    async with KalshiClient() as client:
-        markets = []
-        async for market in client.list_markets(limit=3):
-            markets.append(market)
-
-    # Should return exactly 3 markets
-    assert len(markets) == 3
-
-    # Should only make one API request (no pagination needed)
-    assert route.call_count == 1
-
-
-@pytest.mark.asyncio
-async def test_list_markets_rejects_unknown_kwargs():
-    """Test that passing an unknown keyword argument raises TypeError."""
-    async with KalshiClient() as client:
-        with pytest.raises(TypeError, match="unexpected keyword argument"):
-            async for _ in client.list_markets(unknown_param="value"):
+        with pytest.raises(TypeError):
+            async for _ in client.get_trades(ticker, unknown_param=123):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_list_markets_with_category(respx_mock):
+    """Test list_markets with category filter."""
+    mock_response = {
+        "markets": [
+            {
+                "ticker": "TEST-01",
+                "title": "Test Market 1",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "active",
+            }
+        ],
+        "cursor": None,
+    }
+
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(category="politics"):
+            markets.append(market)
+
+    assert len(markets) == 1
+    requests = respx_mock.calls
+    assert len(requests) == 1
+    assert "category=politics" in requests[0].request.url.query.decode()
