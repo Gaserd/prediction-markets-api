@@ -134,6 +134,26 @@ All venues return data through a unified model with strict guarantees:
 - Books validated to never be crossed (best_bid < best_ask)
 - Sizes: `best_bid_size`, `best_ask_size`, `open_interest`, `liquidity`
 
+**Market Status:**
+- Each market includes `venue_status` (raw venue string) and `status` (normalized enum)
+- Normalized statuses: `MarketStatus.OPEN`, `MarketStatus.CLOSED`, `MarketStatus.RESOLVED`
+- `resolved=True` means the outcome is known (may still be settling)
+- Unknown venue statuses log a warning and return `status=None` (not silently mapped)
+
+**Status Mapping Table:**
+
+| Venue | Raw Status | Normalized Status | Resolved | Notes |
+|-------|------------|------------------|----------|-------|
+| **Kalshi** | `active` | `OPEN` | False | Market is open for trading (filter: `open`) |
+| | `initialized` | `CLOSED` | False | Not yet opened, excluded by `closed=None` (filter: `unopened`) |
+| | `determined` | `RESOLVED` | True | Outcome known, settling (filter: `closed`) |
+| | `finalized` | `RESOLVED` | True | Fully settled and paid out (filter: `settled`) |
+| **Polymarket** | `open` | `OPEN` | False | Market is open for trading (`closed=false`) |
+| | `closed` | `CLOSED` | True | Market is closed (`closed=true`) |
+| **Limitless** | `FUNDED` | `OPEN` | False | Market is active and funded |
+
+**Note:** Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
+
 ### Adapter Architecture
 
 Each venue implements the `BaseClient` interface:
