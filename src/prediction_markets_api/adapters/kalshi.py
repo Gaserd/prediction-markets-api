@@ -78,7 +78,10 @@ class KalshiClient(BaseClient):
         """List markets using Kalshi API cursor pagination.
 
         Args:
-            closed: Filter by closed status (None = all)
+            closed: Filter by closed status:
+                - False: open markets only (status=open)
+                - True: closed and settled markets (status=closed + status=settled, two requests)
+                - None: all markets (no status filter)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 200)
             venue_params: Venue-specific parameters as a dict (optional, unused by Kalshi)
@@ -93,62 +96,85 @@ class KalshiClient(BaseClient):
 
         Raises:
             ValueError: If API returns invalid data
+
+        Note:
+            Kalshi accepts only ONE status per request. Valid statuses: unopened, open, closed, settled.
+            For closed=True, two sequential requests are made (closed + settled) and results are combined.
         """
-        url = f"{self.API_BASE}/markets"
-        params: dict[str, Any] = {"limit": min(page_size, 200)}
+        # Determine which statuses to query
+        statuses: list[str] = []
+        if closed is False:
+            statuses = ["open"]
+        elif closed is True:
+            statuses = ["closed", "settled"]
+        # closed=None: no status filter, statuses stays empty
 
-        if closed is not None:
-            # Kalshi uses status filter: "active", "closed", "settled"
-            params["status"] = "closed" if closed else "active"
-
-        # Exclude multivariate combo markets by default (server-side filter)
-        if not include_multivariate:
-            params["mve_filter"] = "exclude"
-
-        if series_ticker is not None:
-            params["series_ticker"] = series_ticker
-
-        if category is not None:
-            params["category"] = category
-
-        cursor: str | None = None
         yielded = 0
+        seen_ids: set[str] = set()  # Deduplicate across status requests
 
-        while True:
-            if cursor:
-                params["cursor"] = cursor
+        for status in statuses if statuses else [None]:
+            # Build params for this status query
+            url = f"{self.API_BASE}/markets"
+            params: dict[str, Any] = {"limit": min(page_size, 200)}
 
-            try:
-                response = await self._http_client.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch markets: {e}") from e
+            if status is not None:
+                params["status"] = status
 
-            markets = data.get("markets", [])
-            if not markets:
-                break
+            # Exclude multivariate combo markets by default (server-side filter)
+            if not include_multivariate:
+                params["mve_filter"] = "exclude"
 
-            for market_data in markets:
+            if series_ticker is not None:
+                params["series_ticker"] = series_ticker
+
+            if category is not None:
+                params["category"] = category
+
+            cursor: str | None = None
+
+            while True:
+                # Short-circuit: if we've already yielded enough, stop
                 if limit is not None and yielded >= limit:
                     return
 
+                if cursor:
+                    params["cursor"] = cursor
+
                 try:
-                    market = self._parse_market(market_data)
-                    yield market
-                    yielded += 1
-                except (KeyError, ValueError, TypeError) as e:
-                    # Log and skip markets we can't parse
-                    import logging
+                    response = await self._http_client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                except (httpx.HTTPError, ValueError) as e:
+                    raise ValueError(f"Failed to fetch markets: {e}") from e
 
-                    logging.warning(
-                        f"Skipping market due to parse error: {market_data.get('ticker', 'unknown')} - {e}"
-                    )
-                    continue
+                markets = data.get("markets", [])
+                if not markets:
+                    break
 
-            cursor = data.get("cursor")
-            if not cursor:
-                break
+                for market_data in markets:
+                    if limit is not None and yielded >= limit:
+                        return
+
+                    try:
+                        market = self._parse_market(market_data)
+                        # Deduplicate: skip if we've seen this market ID
+                        if market.id in seen_ids:
+                            continue
+                        seen_ids.add(market.id)
+
+                        yield market
+                        yielded += 1
+                    except (KeyError, ValueError, TypeError) as e:
+                        import logging
+
+                        logging.warning(
+                            f"Skipping market due to parse error: {market_data.get('ticker', 'unknown')} - {e}"
+                        )
+                        continue
+
+                cursor = data.get("cursor")
+                if not cursor:
+                    break
 
     async def get_market(self, market_id: str) -> Market:
         """Get a specific market by ticker.

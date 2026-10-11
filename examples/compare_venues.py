@@ -41,11 +41,8 @@ async def main():
     print("\n\n[Kalshi] Searching for Bitcoin markets...")
     async with KalshiClient(timeout=60.0) as client:
         kalshi_markets = []
-        # Note: Kalshi doesn't support closed=False with mve_filter, so we filter client-side
-        async for market in client.list_markets(limit=20):
-            if not market.resolved and (
-                "bitcoin" in market.question.lower() or "btc" in market.question.lower()
-            ):
+        async for market in client.list_markets(closed=False, limit=10):
+            if "bitcoin" in market.question.lower() or "btc" in market.question.lower():
                 kalshi_markets.append(market)
                 if len(kalshi_markets) >= 3:
                     break

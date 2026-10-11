@@ -304,3 +304,190 @@ async def test_list_markets_with_category(respx_mock):
     requests = respx_mock.calls
     assert len(requests) == 1
     assert "category=politics" in requests[0].request.url.query.decode()
+
+
+@pytest.mark.asyncio
+async def test_list_markets_closed_false_uses_status_open(respx_mock):
+    """Test that closed=False maps to status=open (Kalshi valid status)."""
+    mock_response = {
+        "markets": [
+            {
+                "ticker": "TEST-01",
+                "title": "Test Market 1",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "open",
+            }
+        ],
+        "cursor": None,
+    }
+
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=False, limit=5):
+            markets.append(market)
+
+    assert len(markets) == 1
+    requests = respx_mock.calls
+    assert len(requests) == 1
+    query = requests[0].request.url.query.decode()
+    # Must use status=open (valid Kalshi status: unopened, open, closed, settled)
+    assert "status=open" in query
+    # Must NOT use status=active (invalid, causes 400)
+    assert "status=active" not in query
+    # Should also have mve_filter=exclude by default
+    assert "mve_filter=exclude" in query
+
+
+@pytest.mark.asyncio
+async def test_list_markets_closed_true_two_requests(respx_mock):
+    """Test that closed=True makes two requests: status=closed and status=settled."""
+    closed_response = {
+        "markets": [
+            {
+                "ticker": "CLOSED-01",
+                "title": "Closed Market 1",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "closed",
+            },
+            {
+                "ticker": "CLOSED-02",
+                "title": "Closed Market 2",
+                "open_time": "2026-01-02T00:00:00Z",
+                "status": "closed",
+            },
+        ],
+        "cursor": None,
+    }
+
+    settled_response = {
+        "markets": [
+            {
+                "ticker": "SETTLED-01",
+                "title": "Settled Market 1",
+                "open_time": "2026-01-03T00:00:00Z",
+                "status": "settled",
+            }
+        ],
+        "cursor": None,
+    }
+
+    # Mock both requests
+    respx_mock.route(
+        url__regex=r".*status=closed.*"
+    ).mock(return_value=httpx.Response(200, json=closed_response))
+
+    respx_mock.route(
+        url__regex=r".*status=settled.*"
+    ).mock(return_value=httpx.Response(200, json=settled_response))
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=True, limit=10):
+            markets.append(market)
+
+    # Should get all 3 markets (2 closed + 1 settled)
+    assert len(markets) == 3
+
+    # Should have made 2 requests
+    requests = respx_mock.calls
+    assert len(requests) == 2
+
+    # Verify first request was for closed
+    assert "status=closed" in requests[0].request.url.query.decode()
+    # Verify second request was for settled
+    assert "status=settled" in requests[1].request.url.query.decode()
+
+
+@pytest.mark.asyncio
+async def test_list_markets_closed_true_limit_short_circuit(respx_mock):
+    """Test that closed=True stops after first request if limit is reached."""
+    closed_response = {
+        "markets": [
+            {
+                "ticker": f"CLOSED-{i:02d}",
+                "title": f"Closed Market {i}",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "closed",
+            }
+            for i in range(1, 6)  # 5 markets
+        ],
+        "cursor": None,
+    }
+
+    # Mock closed request
+    respx_mock.route(
+        url__regex=r".*status=closed.*"
+    ).mock(return_value=httpx.Response(200, json=closed_response))
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=True, limit=3):
+            markets.append(market)
+
+    # Should only get 3 markets (limit reached)
+    assert len(markets) == 3
+
+    # Should have made only 1 request (closed), not 2, because limit was reached
+    requests = respx_mock.calls
+    assert len(requests) == 1
+    assert "status=closed" in requests[0].request.url.query.decode()
+
+
+@pytest.mark.asyncio
+async def test_list_markets_deduplicates_across_requests(respx_mock):
+    """Test that duplicate markets across status requests are deduplicated."""
+    # Same market appears in both responses (shouldn't happen in practice, but handle it)
+    duplicate_ticker = "DUPLICATE-01"
+
+    closed_response = {
+        "markets": [
+            {
+                "ticker": duplicate_ticker,
+                "title": "Duplicate Market",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "closed",
+            }
+        ],
+        "cursor": None,
+    }
+
+    settled_response = {
+        "markets": [
+            {
+                "ticker": duplicate_ticker,
+                "title": "Duplicate Market",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "settled",
+            },
+            {
+                "ticker": "SETTLED-02",
+                "title": "Unique Settled",
+                "open_time": "2026-01-02T00:00:00Z",
+                "status": "settled",
+            },
+        ],
+        "cursor": None,
+    }
+
+    respx_mock.route(
+        url__regex=r".*status=closed.*"
+    ).mock(return_value=httpx.Response(200, json=closed_response))
+
+    respx_mock.route(
+        url__regex=r".*status=settled.*"
+    ).mock(return_value=httpx.Response(200, json=settled_response))
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=True, limit=10):
+            markets.append(market)
+
+    # Should only yield 2 unique markets (duplicate filtered out)
+    assert len(markets) == 2
+    tickers = [m.id for m in markets]
+    assert duplicate_ticker in tickers
+    assert "SETTLED-02" in tickers

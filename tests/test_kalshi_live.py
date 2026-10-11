@@ -26,6 +26,47 @@ async def test_list_markets_live():
 @pytest.mark.live
 @pytest.mark.timeout(30)
 @pytest.mark.asyncio
+async def test_list_markets_closed_false_live():
+    """Test listing open markets with closed=False (verifies status=open works)."""
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=False, limit=5):
+            markets.append(market)
+
+        assert len(markets) > 0
+        assert len(markets) <= 5
+        assert all(m.venue == "kalshi" for m in markets)
+        # All markets should be open (not resolved)
+        assert all(not m.resolved for m in markets)
+
+        print(f"\nFetched {len(markets)} open markets")
+
+
+@pytest.mark.live
+@pytest.mark.timeout(30)
+@pytest.mark.asyncio
+async def test_list_markets_closed_true_live():
+    """Test listing closed/settled markets with closed=True (verifies two-request logic)."""
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=True, limit=5):
+            markets.append(market)
+
+        assert len(markets) > 0
+        assert len(markets) <= 5
+        assert all(m.venue == "kalshi" for m in markets)
+        # Note: Kalshi returns various statuses for closed markets: closed, settled, determined, etc.
+        # The key is that closed=True queries status=closed and status=settled
+        # Verify we got markets (the two-request logic works)
+        print(
+            f"\nFetched {len(markets)} markets via closed=True "
+            f"with statuses: { {m.raw_data.get('status') for m in markets} }"
+        )
+
+
+@pytest.mark.live
+@pytest.mark.timeout(30)
+@pytest.mark.asyncio
 async def test_get_market_live():
     """Test getting a specific market."""
     async with KalshiClient() as client:
