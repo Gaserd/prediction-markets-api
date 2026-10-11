@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from prediction_markets_api import KalshiClient
-from prediction_markets_api.models.base import Currency, Market, OrderSide
+from prediction_markets_api.models.base import Currency, Market, MarketStatus, OrderSide
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "kalshi"
 
@@ -491,3 +491,160 @@ async def test_list_markets_deduplicates_across_requests(respx_mock):
     tickers = [m.id for m in markets]
     assert duplicate_ticker in tickers
     assert "SETTLED-02" in tickers
+
+
+@pytest.mark.asyncio
+async def test_status_mapping_from_fixtures():
+    """Test that Kalshi status fixtures map to correct normalized statuses."""
+    import json
+    from pathlib import Path
+
+    fixtures_dir = Path("tests/fixtures/kalshi/statuses")
+    meta_path = fixtures_dir / "meta.json"
+
+    assert meta_path.exists(), "Status fixtures meta.json not found"
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    async with KalshiClient() as client:
+        for status_name, expected_data in meta["statuses"].items():
+            fixture_path = fixtures_dir / f"{status_name}.json"
+            assert fixture_path.exists(), f"Fixture {status_name}.json not found"
+
+            with open(fixture_path) as f:
+                market_data = json.load(f)
+
+            market = client._parse_market(market_data)
+
+            # Check venue_status
+            assert market.venue_status == status_name, f"Expected venue_status={status_name}, got {market.venue_status}"
+
+            # Check normalized status
+            expected_status = expected_data["expected_normalized_status"]
+            if expected_status == "open":
+                assert market.status == MarketStatus.OPEN
+            elif expected_status == "closed":
+                assert market.status == MarketStatus.CLOSED
+            elif expected_status == "resolved":
+                assert market.status == MarketStatus.RESOLVED
+
+            # Check resolved flag
+            assert market.resolved == expected_data["expected_resolved"]
+
+            print(f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}")
+
+
+@pytest.mark.asyncio
+async def test_unknown_status_logs_warning(caplog):
+    """Test that unknown Kalshi status logs a warning."""
+    async with KalshiClient() as client:
+        # Create market data with unknown status
+        market_data = {
+            "ticker": "TEST-UNKNOWN",
+            "title": "Test Market",
+            "open_time": "2026-01-01T00:00:00Z",
+            "status": "UNKNOWN_STATUS",
+        }
+
+        with caplog.at_level("WARNING"):
+            market = client._parse_market(market_data)
+
+        # Should have logged a warning
+        assert any("Unknown Kalshi market status 'UNKNOWN_STATUS'" in record.message for record in caplog.records)
+
+        # Status should be None (not normalized)
+        assert market.status is None
+        assert market.venue_status == "UNKNOWN_STATUS"
+
+
+@pytest.mark.asyncio
+async def test_determined_and_finalized_are_resolved():
+    """Test that determined and finalized markets are marked as resolved."""
+    async with KalshiClient() as client:
+        for status_name in ["determined", "finalized"]:
+            market_data = {
+                "ticker": f"TEST-{status_name.upper()}",
+                "title": "Test Market",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": status_name,
+            }
+
+            market = client._parse_market(market_data)
+
+            assert market.resolved is True, f"{status_name} should be resolved=True"
+            assert market.status == MarketStatus.RESOLVED, f"{status_name} should map to RESOLVED"
+
+
+@pytest.mark.asyncio
+async def test_closed_none_excludes_initialized(respx_mock):
+    """Test that closed=None filters out initialized markets client-side."""
+    mock_response = {
+        "markets": [
+            {
+                "ticker": "INITIALIZED-01",
+                "title": "Initialized Market",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "initialized",
+            },
+            {
+                "ticker": "ACTIVE-01",
+                "title": "Active Market",
+                "open_time": "2026-01-02T00:00:00Z",
+                "status": "active",
+            },
+            {
+                "ticker": "DETERMINED-01",
+                "title": "Determined Market",
+                "open_time": "2026-01-03T00:00:00Z",
+                "status": "determined",
+            },
+        ],
+        "cursor": None,
+    }
+
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=None, limit=10):
+            markets.append(market)
+
+    # Should only get active and determined (initialized filtered out)
+    assert len(markets) == 2
+    assert all(m.venue_status != "initialized" for m in markets)
+    tickers = [m.id for m in markets]
+    assert "ACTIVE-01" in tickers
+    assert "DETERMINED-01" in tickers
+    assert "INITIALIZED-01" not in tickers
+
+
+@pytest.mark.asyncio
+async def test_closed_none_applies_limit_after_filtering(respx_mock):
+    """Test that closed=None applies limit AFTER filtering out initialized markets."""
+    # Return more markets than the limit, including some initialized
+    mock_response = {
+        "markets": [
+            {"ticker": f"INIT-{i:02d}", "title": f"Init {i}", "open_time": "2026-01-01T00:00:00Z", "status": "initialized"}
+            for i in range(5)
+        ] + [
+            {"ticker": f"ACTIVE-{i:02d}", "title": f"Active {i}", "open_time": "2026-01-01T00:00:00Z", "status": "active"}
+            for i in range(5)
+        ],
+        "cursor": None,
+    }
+
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(closed=None, limit=3):
+            markets.append(market)
+
+    # Should get exactly 3 markets (all active, initialized filtered out before limit)
+    assert len(markets) == 3
+    assert all(m.venue_status == "active" for m in markets)

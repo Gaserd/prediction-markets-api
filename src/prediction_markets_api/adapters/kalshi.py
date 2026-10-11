@@ -20,6 +20,7 @@ from prediction_markets_api.adapters.base import BaseClient
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -81,7 +82,7 @@ class KalshiClient(BaseClient):
             closed: Filter by closed status:
                 - False: open markets only (status=open)
                 - True: closed and settled markets (status=closed + status=settled, two requests)
-                - None: all markets (no status filter)
+                - None: all markets except unopened (no status filter, drops initialized client-side)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 200)
             venue_params: Venue-specific parameters as a dict (optional, unused by Kalshi)
@@ -92,13 +93,14 @@ class KalshiClient(BaseClient):
             category: Filter by category (keyword-only)
 
         Yields:
-            Market objects (up to `limit` total)
+            Market objects (up to `limit` total, applied AFTER client-side filtering for closed=None)
 
         Raises:
             ValueError: If API returns invalid data
 
         Note:
-            Kalshi accepts only ONE status per request. Valid statuses: unopened, open, closed, settled.
+            Kalshi accepts only ONE status per request. Valid filter statuses: unopened, open, closed, settled.
+            Response statuses differ from filter: open->active, closed->determined, settled->finalized, unopened->initialized.
             For closed=True, two sequential requests are made (closed + settled) and results are combined.
         """
         # Determine which statuses to query
@@ -152,15 +154,21 @@ class KalshiClient(BaseClient):
                     break
 
                 for market_data in markets:
-                    if limit is not None and yielded >= limit:
-                        return
-
                     try:
                         market = self._parse_market(market_data)
+
                         # Deduplicate: skip if we've seen this market ID
                         if market.id in seen_ids:
                             continue
                         seen_ids.add(market.id)
+
+                        # For closed=None, filter out initialized (unopened) markets client-side
+                        if closed is None and market.venue_status and market.venue_status.lower() == "initialized":
+                            continue
+
+                        # Apply limit AFTER filtering
+                        if limit is not None and yielded >= limit:
+                            return
 
                         yield market
                         yielded += 1
@@ -423,8 +431,34 @@ class KalshiClient(BaseClient):
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
 
-        status = data.get("status", "")
-        resolved = status in ("closed", "settled")
+        # Kalshi status mapping (response values differ from filter names):
+        # Filter: open -> Response: active
+        # Filter: closed -> Response: determined
+        # Filter: settled -> Response: finalized
+        # Filter: unopened -> Response: initialized
+        venue_status = data.get("status", "")
+
+        # Map to normalized status
+        status_map = {
+            "active": MarketStatus.OPEN,
+            "initialized": MarketStatus.CLOSED,  # Not yet opened
+            "determined": MarketStatus.RESOLVED,  # Outcome determined but not yet paid out
+            "finalized": MarketStatus.RESOLVED,   # Fully settled and paid out
+        }
+
+        status = status_map.get(venue_status.lower())
+        if status is None and venue_status:
+            import logging
+            logging.warning(
+                f"Unknown Kalshi market status '{venue_status}' for market {data.get('ticker')}. "
+                "This status will not be normalized."
+            )
+
+        # Market is resolved if outcome is known (determined or finalized)
+        resolved = venue_status.lower() in ("determined", "finalized")
+
+        # Check if there's a result field indicating the winning outcome
+        result = data.get("result")
 
         # Volume in USD (already in dollars in new API)
         volume = None
@@ -514,6 +548,16 @@ class KalshiClient(BaseClient):
             )
         )
 
+        # Mark winning outcome if result is provided
+        if result and resolved:
+            for outcome in outcomes:
+                # Kalshi result is "yes" or "no"
+                if result.lower() == outcome.name.lower():
+                    # Mark as winner - we can add a field to Outcome later if needed
+                    # For now, store it in raw_data
+                    if "winning_outcome" not in data:
+                        data["winning_outcome"] = outcome.name
+
         return Market(
             id=ticker,
             venue="kalshi",
@@ -523,6 +567,8 @@ class KalshiClient(BaseClient):
             created_at=created_at,
             end_date=end_date,
             resolved=resolved,
+            venue_status=venue_status,
+            status=status,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=best_bid_size,

@@ -22,6 +22,7 @@ from prediction_markets_api.adapters.base import BaseClient
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -356,9 +357,28 @@ class LimitlessClient(BaseClient):
             except (ValueError, TypeError):
                 pass
 
-        status = data.get("status", "")
+        # Limitless status mapping
+        venue_status = data.get("status", "")
         expired = data.get("expired", False)
-        resolved = status == "RESOLVED" or expired
+
+        # Map to normalized status
+        status_map = {
+            "funded": MarketStatus.OPEN,  # Market is active and funded
+            "active": MarketStatus.OPEN,
+            "open": MarketStatus.OPEN,
+            "resolved": MarketStatus.RESOLVED,
+            "closed": MarketStatus.CLOSED,
+        }
+
+        status = status_map.get(venue_status.lower())
+        if status is None and venue_status:
+            import logging
+            logging.warning(
+                f"Unknown Limitless market status '{venue_status}' for market {slug}. "
+                "This status will not be normalized."
+            )
+
+        resolved = venue_status.upper() == "RESOLVED" or expired
 
         volume = None
         volume_str = data.get("volumeFormatted")
@@ -425,6 +445,8 @@ class LimitlessClient(BaseClient):
             created_at=created_at,
             end_date=end_date,
             resolved=resolved,
+            venue_status=venue_status,
+            status=status,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=None,
