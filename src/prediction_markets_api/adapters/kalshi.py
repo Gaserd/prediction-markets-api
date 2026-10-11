@@ -69,7 +69,9 @@ class KalshiClient(BaseClient):
         closed: bool | None = None,
         limit: int | None = None,
         page_size: int = 100,
-        **kwargs: object,
+        venue_params: dict[str, Any] | None = None,
+        *,
+        include_multivariate: bool = False,
     ) -> AsyncIterator[Market]:
         """List markets using Kalshi API cursor pagination.
 
@@ -77,7 +79,10 @@ class KalshiClient(BaseClient):
             closed: Filter by closed status (None = all)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 200)
-            **kwargs: Additional Kalshi API filters (status, series_ticker, etc.)
+            venue_params: Venue-specific parameters as a dict (optional, unused by Kalshi)
+            include_multivariate: Include multivariate combo markets (KXMVE*). Default False
+                to exclude them via server-side mve_filter=exclude, as they flood listings
+                and often 404 on direct GET. Kalshi-specific keyword-only parameter.
 
         Yields:
             Market objects (up to `limit` total)
@@ -92,9 +97,9 @@ class KalshiClient(BaseClient):
             # Kalshi uses status filter: "active", "closed", "settled"
             params["status"] = "closed" if closed else "active"
 
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
+        # Exclude multivariate combo markets by default (server-side filter)
+        if not include_multivariate:
+            params["mve_filter"] = "exclude"
 
         cursor: str | None = None
         yielded = 0
@@ -198,6 +203,9 @@ class KalshiClient(BaseClient):
         Contract (same as Polymarket):
         - get_price(BUY) returns the best ask (what a buyer pays to buy YES)
         - get_price(SELL) returns the best bid (what a seller receives selling YES)
+
+        Note: For the derived YES ask price, raw_price holds the original raw NO bid string
+        from the Kalshi API (before the 1 - p transformation).
 
         Args:
             outcome_id: Kalshi ticker

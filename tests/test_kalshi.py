@@ -263,3 +263,81 @@ async def test_price_matches_order_book_top(respx_mock):
             # Verify against fixture
             if prices_data.get("buy"):
                 assert float(buy_price.price) == prices_data["buy"]["price"]
+
+
+@pytest.mark.asyncio
+async def test_excludes_multivariate_by_default(respx_mock):
+    """Test that mve_filter=exclude is sent by default to exclude KXMVE* markets server-side."""
+    markets_data = load_fixture("markets_response.json")
+
+    # Verify the request includes mve_filter=exclude
+    route = respx_mock.get(
+        "https://api.elections.kalshi.com/trade-api/v2/markets"
+    ).mock(return_value=httpx.Response(200, json=markets_data))
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(limit=10):
+            markets.append(market)
+
+    # Verify mve_filter=exclude was sent (server-side filtering)
+    assert route.called
+    request = route.calls.last.request
+    assert "mve_filter=exclude" in str(request.url), "mve_filter=exclude should be sent by default"
+
+
+@pytest.mark.asyncio
+async def test_includes_multivariate_when_opted_in(respx_mock):
+    """Test that multivariate markets can be included with include_multivariate=True."""
+    markets_data = load_fixture("markets_response.json")
+
+    # Verify the request does NOT include mve_filter when opted in
+    route = respx_mock.get(
+        "https://api.elections.kalshi.com/trade-api/v2/markets"
+    ).mock(return_value=httpx.Response(200, json=markets_data))
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(limit=10, include_multivariate=True):
+            markets.append(market)
+
+    # Verify mve_filter was NOT sent
+    assert route.called
+    request = route.calls.last.request
+    assert "mve_filter" not in str(request.url)
+
+
+@pytest.mark.asyncio
+async def test_list_markets_returns_exact_limit(respx_mock):
+    """Test that list_markets(limit=N) returns exactly N markets without extra page requests."""
+    # Create fixture with enough markets
+    markets_data = load_fixture("markets_response.json")
+
+    # Ensure we have at least 5 markets
+    while len(markets_data["markets"]) < 5:
+        markets_data["markets"].append(markets_data["markets"][0].copy())
+
+    # Mock the response
+    route = respx_mock.get(
+        "https://api.elections.kalshi.com/trade-api/v2/markets"
+    ).mock(return_value=httpx.Response(200, json=markets_data))
+
+    async with KalshiClient() as client:
+        markets = []
+        async for market in client.list_markets(limit=3):
+            markets.append(market)
+
+    # Should return exactly 3 markets
+    assert len(markets) == 3
+
+    # Should only make one API request (no pagination needed)
+    assert route.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_markets_rejects_unknown_kwargs():
+    """Test that passing an unknown keyword argument raises TypeError."""
+    async with KalshiClient() as client:
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            async for _ in client.list_markets(unknown_param="value"):
+                pass

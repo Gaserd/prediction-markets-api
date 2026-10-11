@@ -1,0 +1,6 @@
+{
+  "recorded_at": "2026-10-10T06:13:00.000Z",
+  "request": "GET /markets/btc-up-or-down-5-min-1791612600/orderbook",
+  "market_id": "btc-up-or-down-5-min-1791612600",
+  "description": "Order book snapshot for BTC 5-min market with liquidity on both sides"
+}
