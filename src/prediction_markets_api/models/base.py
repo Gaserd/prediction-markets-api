@@ -28,6 +28,14 @@ class Currency(str, Enum):
     USDC = "USDC"
 
 
+class MarketStatus(str, Enum):
+    """Normalized market status across all venues."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+    RESOLVED = "resolved"
+
+
 class Outcome(BaseModel):
     """An outcome (token) within a market.
 
@@ -71,6 +79,11 @@ class Market(BaseModel):
     created_at: datetime = Field(description="Market creation timestamp (UTC)")
     end_date: datetime | None = Field(None, description="Market end/close timestamp (UTC)")
     resolved: bool = Field(default=False, description="Whether market is resolved")
+    venue_status: str | None = Field(None, description="Raw venue-specific status string")
+    status: MarketStatus | None = Field(
+        None,
+        description="Normalized market status: open, closed, or resolved. None if unknown.",
+    )
     volume: Decimal | None = Field(None, description="Total trading volume", ge=Decimal("0"))
     open_interest: Decimal | None = Field(
         None,

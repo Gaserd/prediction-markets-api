@@ -1,0 +1,26 @@
+{
+  "description": "Kalshi market status fixtures recorded from live API",
+  "recorded_at": "2026-10-11",
+  "statuses": {
+    "active": {
+      "description": "Open market (filter: open)",
+      "expected_normalized_status": "open",
+      "expected_resolved": false
+    },
+    "determined": {
+      "description": "Outcome determined but not yet paid out (filter: closed)",
+      "expected_normalized_status": "resolved",
+      "expected_resolved": true
+    },
+    "finalized": {
+      "description": "Fully settled and paid out (filter: settled)",
+      "expected_normalized_status": "resolved",
+      "expected_resolved": true
+    },
+    "initialized": {
+      "description": "Not yet opened (filter: unopened)",
+      "expected_normalized_status": "closed",
+      "expected_resolved": false
+    }
+  }
+}

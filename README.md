@@ -103,6 +103,123 @@ async with PolymarketClient() as client:
         print(f"{trade.timestamp}: {trade.side.value} {trade.size} @ {trade.price}")
 ```
 
+## How It Works
+
+### Data Model Contract
+
+All venues return data through a unified model with strict guarantees:
+
+**Price Normalization:**
+- Prices are normalized to 0..1 probability space (e.g., 0.65 = 65% probability)
+- Original venue prices preserved in `raw_price` field for reference
+- `OrderSide.BUY` means buying the outcome (get_price returns best ask)
+- `OrderSide.SELL` means selling the outcome (get_price returns best bid)
+
+**Timestamps:**
+- All timestamps are timezone-aware UTC (never naive datetimes)
+- Created dates, end dates, and trade timestamps use `datetime` with `tzinfo=timezone.utc`
+
+**Currency:**
+- All amounts include explicit currency (`Currency.USD`, `Currency.USDC`)
+- No ambiguous currency-free numbers
+
+**Partial Responses:**
+- Markets with incomplete data are flagged with `partial=True`
+- Only raise errors for invalid data, not incomplete data
+- Allows graceful degradation when APIs return partial information
+
+**Order Book Semantics:**
+- Bids sorted descending (best bid = highest price first)
+- Asks sorted ascending (best ask = lowest price first)
+- Books validated to never be crossed (best_bid < best_ask)
+- Sizes: `best_bid_size`, `best_ask_size`, `open_interest`, `liquidity`
+
+**Market Status:**
+- Each market includes `venue_status` (raw venue string) and `status` (normalized enum)
+- Normalized statuses: `MarketStatus.OPEN`, `MarketStatus.CLOSED`, `MarketStatus.RESOLVED`
+- `resolved=True` means the outcome is known (may still be settling)
+- Unknown venue statuses log a warning and return `status=None` (not silently mapped)
+
+**Status Mapping Table:**
+
+| Venue | Raw Status | Normalized Status | Resolved | Notes |
+|-------|------------|------------------|----------|-------|
+| **Kalshi** | `active` | `OPEN` | False | Market is open for trading (filter: `open`) |
+| | `initialized` | `CLOSED` | False | Not yet opened, excluded by `closed=None` (filter: `unopened`) |
+| | `determined` | `RESOLVED` | True | Outcome known, settling (filter: `closed`) |
+| | `finalized` | `RESOLVED` | True | Fully settled and paid out (filter: `settled`) |
+| **Polymarket** | `open` | `OPEN` | False | Market is open for trading (`closed=false`) |
+| | `closed` | `CLOSED` | True | Market is closed (`closed=true`) |
+| **Limitless** | `FUNDED` | `OPEN` | False | Market is active and funded |
+
+**Note:** Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
+
+### Adapter Architecture
+
+Each venue implements the `BaseClient` interface:
+
+```python
+from prediction_markets_api import PolymarketClient, KalshiClient
+
+# All clients provide the same methods:
+async with PolymarketClient() as client:
+    async for market in client.list_markets(limit=10):  # Standard method
+        print(market.question)
+```
+
+**Unified Methods:**
+- `list_markets(closed, limit, page_size, *, venue_params)` - List markets with pagination
+- `iter_markets(closed)` - Iterate all markets (no limit)
+- `get_market(market_id)` - Get single market by ID
+- `get_order_book(outcome_id)` - Get sorted, validated order book
+- `get_price(outcome_id, side)` - Get best executable price
+- `get_trades(outcome_id, limit)` - Historical trades iterator
+- `place_order(...)` - Place order (dry_run=True by default)
+
+**Venue-Specific Parameters:**
+- Venue-specific filters are keyword-only arguments (no `**kwargs`)
+- Example: `client.list_markets(category="politics")` for Kalshi
+- Prevents accidental parameter mismatches between venues
+
+### API Keys and Configuration
+
+**Read Operations:** No authentication required for market data, prices, and order books.
+
+**Trading Operations:** Require API keys via environment variables:
+
+```bash
+# Polymarket
+export POLYMARKET_API_KEY="your_key"
+export POLYMARKET_API_SECRET="your_secret"
+export POLYMARKET_WALLET_ADDRESS="0x..."
+
+# Kalshi
+export KALSHI_API_KEY="your_key"
+export KALSHI_API_SECRET="your_secret"
+```
+
+**Never hardcode API keys in source code.**
+
+### Dry-Run Safety
+
+Trading has safe defaults:
+
+```python
+# Default: dry_run=True (safe simulation)
+result = await client.place_order(outcome_id, OrderSide.BUY, size, price)
+# → {'dry_run': True, 'status': 'simulated', ...}
+
+# Real orders require explicit opt-in
+result = await client.place_order(..., dry_run=False)
+```
+
+### Geographic Restrictions
+
+Be aware of venue restrictions:
+- **Polymarket**: US users blocked
+- **Kalshi**: US only (CFTC regulated)
+- **Limitless**: No restrictions (planned)
+
 ## Data Model
 
 All venues return data through a unified model:
@@ -146,6 +263,37 @@ Market(
     partial=False,
 )
 ```
+
+## Examples
+
+The `examples/` directory contains runnable examples:
+
+### Compare Same Event Across Venues
+
+```bash
+python examples/compare_venues.py
+```
+
+Search for the same event (e.g., Bitcoin predictions) across Polymarket and Kalshi, comparing prices and volumes.
+
+### Price History Analysis
+
+```bash
+python examples/price_history.py
+```
+
+Fetch historical trades for an outcome and calculate price statistics, movements, and spreads.
+
+### Export to Pandas
+
+```bash
+pip install prediction-markets-api[pandas]
+python examples/export_to_pandas.py
+```
+
+Export market data and trades to pandas DataFrames for statistical analysis, visualization, or CSV export.
+
+See [examples/README.md](examples/README.md) for details.
 
 ## Trading Configuration
 

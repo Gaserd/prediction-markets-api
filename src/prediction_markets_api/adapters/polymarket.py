@@ -13,6 +13,7 @@ from prediction_markets_api.adapters.base import BaseClient
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -185,6 +186,44 @@ class PolymarketClient(BaseClient):
 
         return order_book
 
+    async def get_tokens(self, token_ids: list[str]) -> list[dict[str, Any]]:
+        """Get token data for multiple tokens in batch.
+
+        Uses Data API v2 /tokens endpoint (added Oct 7, 2026).
+        Automatically chunks requests into batches of 50 tokens (API limit).
+
+        Args:
+            token_ids: List of Polymarket token_ids (any number)
+
+        Returns:
+            List of token data dictionaries for all requested tokens
+
+        Raises:
+            ValueError: If API returns invalid data or request fails
+        """
+        if not token_ids:
+            return []
+
+        results = []
+        chunk_size = 50
+
+        for i in range(0, len(token_ids), chunk_size):
+            chunk = token_ids[i : i + chunk_size]
+            url = f"{self.DATA_API_BASE}/tokens"
+            params = {"token_ids": ",".join(chunk)}
+
+            try:
+                response = await self._http_client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+            except (httpx.HTTPError, ValueError) as e:
+                raise ValueError(f"Failed to fetch tokens: {e}") from e
+
+            tokens: list[dict[str, Any]] = data.get("data", [])
+            results.extend(tokens)
+
+        return results
+
     async def get_price(self, outcome_id: str, side: OrderSide) -> Price:
         """Get best executable price for an outcome and side.
 
@@ -244,7 +283,9 @@ class PolymarketClient(BaseClient):
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
+        *,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
     ) -> AsyncIterator[Trade]:
         """Get historical trades for an outcome.
 
@@ -253,7 +294,8 @@ class PolymarketClient(BaseClient):
         Args:
             outcome_id: Polymarket token_id
             limit: Results per page
-            **kwargs: Additional filters (start_ts, end_ts, etc.)
+            start_ts: Filter trades after this Unix timestamp (seconds)
+            end_ts: Filter trades before this Unix timestamp (seconds)
 
         Yields:
             Trade objects
@@ -264,9 +306,10 @@ class PolymarketClient(BaseClient):
             "limit": limit,
         }
 
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
+        if start_ts is not None:
+            params["start_ts"] = start_ts
+        if end_ts is not None:
+            params["end_ts"] = end_ts
 
         cursor: str | None = None
 
@@ -382,7 +425,37 @@ class PolymarketClient(BaseClient):
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
 
-        resolved = data.get("closed", False)
+        # Polymarket uses "closed" boolean field
+        # Check if there's also a status field
+        venue_status_raw = data.get("status") or data.get("marketStatus")
+        closed_flag = data.get("closed", False)
+
+        # Determine venue_status and normalized status
+        if venue_status_raw:
+            venue_status = str(venue_status_raw)
+        elif closed_flag:
+            venue_status = "closed"
+        else:
+            venue_status = "open"
+
+        # Map to normalized status
+        # Polymarket statuses need to be verified from live API
+        status_map = {
+            "open": MarketStatus.OPEN,
+            "active": MarketStatus.OPEN,
+            "closed": MarketStatus.CLOSED,
+            "resolved": MarketStatus.RESOLVED,
+        }
+
+        status = status_map.get(venue_status.lower())
+        if status is None and venue_status:
+            import logging
+            logging.warning(
+                f"Unknown Polymarket market status '{venue_status}' for market {condition_id}. "
+                "This status will not be normalized."
+            )
+
+        resolved = closed_flag or venue_status.lower() == "resolved"
 
         volume = None
         if "volumeNum" in data:
@@ -462,6 +535,8 @@ class PolymarketClient(BaseClient):
             created_at=created_at,
             end_date=end_date,
             resolved=resolved,
+            venue_status=venue_status,
+            status=status,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=best_bid_size,
@@ -488,6 +563,17 @@ class PolymarketClient(BaseClient):
         except (ValueError, TypeError):
             created_at = datetime.now(timezone.utc)
 
+        # Determine venue_status for partial market
+        venue_status_raw = data.get("status") or data.get("marketStatus")
+        closed_flag = data.get("closed", False)
+
+        if venue_status_raw:
+            venue_status = str(venue_status_raw)
+        elif closed_flag:
+            venue_status = "closed"
+        else:
+            venue_status = "open"
+
         return Market(
             id=str(condition_id),
             venue="polymarket",
@@ -497,6 +583,8 @@ class PolymarketClient(BaseClient):
             created_at=created_at,
             end_date=None,
             resolved=False,
+            venue_status=venue_status,
+            status=None,  # Don't normalize for partial markets
             volume=None,
             open_interest=None,
             best_bid_size=None,

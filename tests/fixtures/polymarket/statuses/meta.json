@@ -1,0 +1,17 @@
+{
+  "description": "Polymarket market status fixtures recorded from live API",
+  "recorded_at": "2026-10-11",
+  "note": "Polymarket uses 'closed' boolean field, not an explicit status string",
+  "statuses": {
+    "open": {
+      "description": "Open market (closed=false)",
+      "expected_normalized_status": "open",
+      "expected_resolved": false
+    },
+    "closed": {
+      "description": "Closed market (closed=true)",
+      "expected_normalized_status": "closed",
+      "expected_resolved": true
+    }
+  }
+}

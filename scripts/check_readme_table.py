@@ -25,8 +25,7 @@ def check_readme() -> bool:
 
     # Find the venue section
     venue_section_pattern = re.compile(
-        r"## Supported Venues\n\n.*?\n\n\| Venue.*?\| BetDEX.*?\|\n",
-        re.DOTALL | re.MULTILINE
+        r"## Supported Venues\n\n.*?\n\n\| Venue.*?\| BetDEX.*?\|\n", re.DOTALL | re.MULTILINE
     )
 
     match = venue_section_pattern.search(readme_content)

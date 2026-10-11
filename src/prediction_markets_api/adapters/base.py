@@ -106,17 +106,19 @@ class BaseClient(ABC):
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
     ) -> AsyncIterator[Trade]:
         """Get historical trades for an outcome.
 
         Args:
             outcome_id: Venue-specific outcome identifier
             limit: Maximum results per page
-            **kwargs: Venue-specific filters
 
         Yields:
             Trade objects
+
+        Note:
+            Venue-specific filters should be keyword-only arguments
+            in the concrete implementation.
         """
         raise NotImplementedError
         yield  # pragma: no cover
