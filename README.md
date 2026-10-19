@@ -149,10 +149,14 @@ All venues return data through a unified model with strict guarantees:
 | | `determined` | `RESOLVED` | True | Outcome known, settling (filter: `closed`) |
 | | `finalized` | `RESOLVED` | True | Fully settled and paid out (filter: `settled`) |
 | **Polymarket** | `open` | `OPEN` | False | Market is open for trading (`closed=false`) |
-| | `closed` | `CLOSED` | True | Market is closed (`closed=true`) |
+| | `closed` | `CLOSED` | False | Market closed but outcome not yet determined |
+| | `resolved` | `RESOLVED` | True | Market resolved, outcome prices settled to 0/1 |
 | **Limitless** | `FUNDED` | `OPEN` | False | Market is active and funded |
 
-**Note:** Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
+**Notes:**
+- Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
+- Polymarket resolution is determined by checking if outcome prices are settled to 0/1 (e.g., `["0.0001", "0.9999"]`), not just the `closed` boolean.
+- Limitless only exposes `FUNDED` markets via `/markets/active` endpoint.
 
 ### Adapter Architecture
 

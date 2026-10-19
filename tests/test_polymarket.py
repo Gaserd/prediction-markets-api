@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from prediction_markets_api.adapters.polymarket import PolymarketClient
-from prediction_markets_api.models.base import Currency, OrderSide
+from prediction_markets_api.models.base import Currency, MarketStatus, OrderSide
 
 
 @pytest.mark.asyncio
@@ -476,3 +476,108 @@ async def test_get_tokens_chunking(respx_mock):
     # Verify chunk sizes
     assert len(requests[0].request.url.params["token_ids"].split(",")) == 50
     assert len(requests[1].request.url.params["token_ids"].split(",")) == 25
+
+
+@pytest.mark.asyncio
+async def test_status_mapping_from_fixtures():
+    """Test that Polymarket status fixtures map to correct normalized statuses."""
+    import json
+    from pathlib import Path
+
+    from prediction_markets_api.models.base import MarketStatus
+
+    fixtures_dir = Path("tests/fixtures/polymarket/statuses")
+    meta_path = fixtures_dir / "meta.json"
+
+    assert meta_path.exists(), "Status fixtures meta.json not found"
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    async with PolymarketClient() as client:
+        for status_name, expected_data in meta["statuses"].items():
+            fixture_path = fixtures_dir / f"{status_name}.json"
+            assert fixture_path.exists(), f"Fixture {status_name}.json not found"
+
+            with open(fixture_path) as f:
+                market_data = json.load(f)
+
+            market = client._parse_market(market_data)
+
+            # Check venue_status
+            assert market.venue_status == status_name, f"Expected venue_status={status_name}, got {market.venue_status}"
+
+            # Check normalized status
+            expected_status = expected_data["expected_normalized_status"]
+            if expected_status == "open":
+                assert market.status == MarketStatus.OPEN
+            elif expected_status == "closed":
+                assert market.status == MarketStatus.CLOSED
+            elif expected_status == "resolved":
+                assert market.status == MarketStatus.RESOLVED
+
+            # Check resolved flag
+            assert market.resolved == expected_data["expected_resolved"]
+
+            # Check winning outcome if expected
+            if expected_data.get("has_winning_outcome"):
+                assert "winning_outcome" in market.raw_data, f"Expected winning_outcome for {status_name}"
+                assert market.raw_data["winning_outcome"] in ["Yes", "No"], "Winning outcome should be Yes or No"
+
+            print(f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}")
+
+
+@pytest.mark.asyncio
+async def test_closed_vs_resolved_distinction():
+    """Test that Polymarket correctly distinguishes closed from resolved markets."""
+    async with PolymarketClient() as client:
+        # Closed but unresolved (prices not settled)
+        closed_unresolved = {
+            "conditionId": "test-closed",
+            "question": "Test Closed Market",
+            "closed": True,
+            "outcomePrices": '["0.5", "0.5"]',
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(closed_unresolved)
+        assert market.venue_status == "closed"
+        assert market.status == MarketStatus.CLOSED
+        assert market.resolved is False
+        assert "winning_outcome" not in market.raw_data
+
+        # Resolved (prices settled to 0/1)
+        resolved_yes = {
+            "conditionId": "test-resolved-yes",
+            "question": "Test Resolved Market (Yes wins)",
+            "closed": True,
+            "outcomePrices": '["0.9999", "0.0001"]',
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(resolved_yes)
+        assert market.venue_status == "resolved"
+        assert market.status == MarketStatus.RESOLVED
+        assert market.resolved is True
+        assert market.raw_data["winning_outcome"] == "Yes"
+
+        # Resolved (No wins)
+        resolved_no = {
+            "conditionId": "test-resolved-no",
+            "question": "Test Resolved Market (No wins)",
+            "closed": True,
+            "outcomePrices": '["0.0001", "0.9999"]',
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(resolved_no)
+        assert market.venue_status == "resolved"
+        assert market.status == MarketStatus.RESOLVED
+        assert market.resolved is True
+        assert market.raw_data["winning_outcome"] == "No"

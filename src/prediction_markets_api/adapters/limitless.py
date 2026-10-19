@@ -360,6 +360,7 @@ class LimitlessClient(BaseClient):
         # Limitless status mapping
         venue_status = data.get("status", "")
         expired = data.get("expired", False)
+        result = data.get("result")  # Winning outcome when resolved
 
         # Map to normalized status
         status_map = {
@@ -378,7 +379,8 @@ class LimitlessClient(BaseClient):
                 "This status will not be normalized."
             )
 
-        resolved = venue_status.upper() == "RESOLVED" or expired
+        # Market is resolved if status is RESOLVED or has a result
+        resolved = venue_status.upper() == "RESOLVED" or result is not None or expired
 
         volume = None
         volume_str = data.get("volumeFormatted")
@@ -435,6 +437,15 @@ class LimitlessClient(BaseClient):
                     raw_price=str(prices[1]) if prices[1] is not None else None,
                 )
             )
+
+        # Mark winning outcome if result is present
+        if result is not None and resolved:
+            # result could be "yes", "no", or other values
+            result_str = str(result).lower()
+            for outcome in outcomes:
+                if outcome.name.lower() == result_str:
+                    data["winning_outcome"] = outcome.name
+                    break
 
         return Market(
             id=slug,

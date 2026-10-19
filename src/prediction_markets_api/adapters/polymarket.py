@@ -425,37 +425,50 @@ class PolymarketClient(BaseClient):
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
 
-        # Polymarket uses "closed" boolean field
-        # Check if there's also a status field
-        venue_status_raw = data.get("status") or data.get("marketStatus")
+        # Polymarket status determination
+        # Polymarket uses "closed" boolean, not an explicit status string
         closed_flag = data.get("closed", False)
 
+        # Determine if market is actually resolved by checking outcome prices
+        # A market is resolved when prices are settled to 0/1 (one outcome won)
+        outcome_prices_str = data.get("outcomePrices", "[]")
+        is_resolved = False
+        winning_outcome_index = None
+
+        try:
+            if isinstance(outcome_prices_str, str):
+                import json
+                outcome_prices_list = json.loads(outcome_prices_str)
+            else:
+                outcome_prices_list = outcome_prices_str
+
+            if len(outcome_prices_list) >= 2:
+                p0 = float(outcome_prices_list[0])
+                p1 = float(outcome_prices_list[1])
+
+                # Check if settled (one outcome very close to 1, other very close to 0)
+                if p0 > 0.99 and p1 < 0.01:
+                    is_resolved = True
+                    winning_outcome_index = 0
+                elif p1 > 0.99 and p0 < 0.01:
+                    is_resolved = True
+                    winning_outcome_index = 1
+        except (ValueError, TypeError, json.JSONDecodeError):
+            pass
+
         # Determine venue_status and normalized status
-        if venue_status_raw:
-            venue_status = str(venue_status_raw)
-        elif closed_flag:
-            venue_status = "closed"
+        if closed_flag:
+            if is_resolved:
+                venue_status = "resolved"
+                status = MarketStatus.RESOLVED
+            else:
+                venue_status = "closed"
+                status = MarketStatus.CLOSED
         else:
             venue_status = "open"
+            status = MarketStatus.OPEN
 
-        # Map to normalized status
-        # Polymarket statuses need to be verified from live API
-        status_map = {
-            "open": MarketStatus.OPEN,
-            "active": MarketStatus.OPEN,
-            "closed": MarketStatus.CLOSED,
-            "resolved": MarketStatus.RESOLVED,
-        }
-
-        status = status_map.get(venue_status.lower())
-        if status is None and venue_status:
-            import logging
-            logging.warning(
-                f"Unknown Polymarket market status '{venue_status}' for market {condition_id}. "
-                "This status will not be normalized."
-            )
-
-        resolved = closed_flag or venue_status.lower() == "resolved"
+        resolved = is_resolved
 
         volume = None
         if "volumeNum" in data:
@@ -525,6 +538,10 @@ class PolymarketClient(BaseClient):
                     raw_price=raw_price,
                 )
             )
+
+        # Mark winning outcome if resolved
+        if is_resolved and winning_outcome_index is not None and winning_outcome_index < len(outcomes):
+            data["winning_outcome"] = outcomes[winning_outcome_index].name
 
         return Market(
             id=condition_id,
