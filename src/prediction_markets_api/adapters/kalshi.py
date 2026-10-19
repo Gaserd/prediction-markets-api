@@ -17,7 +17,12 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
-from prediction_markets_api.exceptions import NotFoundError, RateLimitError, VenueAPIError
+from prediction_markets_api.exceptions import (
+    NoLiquidityError,
+    NotFoundError,
+    RateLimitError,
+    VenueAPIError,
+)
 from prediction_markets_api.models.base import (
     Currency,
     Market,
@@ -360,14 +365,36 @@ class KalshiClient(BaseClient):
         if side == OrderSide.BUY:
             # User wants to BUY YES -> needs best ask
             if not order_book.asks:
-                raise ValueError(f"No liquidity to buy (no asks) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to buy (no asks) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="BUY",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.asks[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
         else:
             # User wants to SELL YES -> needs best bid
             if not order_book.bids:
-                raise ValueError(f"No liquidity to sell (no bids) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to sell (no bids) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="SELL",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.bids[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
@@ -387,24 +414,113 @@ class KalshiClient(BaseClient):
         outcome_id: str,
         limit: int = 100,
         *,
+        page_size: int = 100,
         min_ts: int | None = None,
         max_ts: int | None = None,
     ) -> AsyncIterator[Trade]:
-        """Get historical trades for an outcome.
+        """Get historical trades for an outcome (bounded).
 
         Args:
             outcome_id: Kalshi ticker
-            limit: Results per page
+            limit: Maximum total trades to return (default 100)
+            page_size: Results per API request (default 100, max 200)
             min_ts: Filter trades after this Unix timestamp (milliseconds)
             max_ts: Filter trades before this Unix timestamp (milliseconds)
 
         Yields:
-            Trade objects
+            Trade objects (up to `limit` total)
+        """
+        url = f"{self.API_BASE}/markets/trades"
+        
+        yielded = 0
+        cursor: str | None = None
+
+        while yielded < limit:
+            # Request min(remaining, page_size) items
+            request_limit = min(limit - yielded, page_size, 200)
+            
+            params: dict[str, Any] = {
+                "ticker": outcome_id,
+                "limit": request_limit,
+            }
+
+            if min_ts is not None:
+                params["min_ts"] = min_ts
+            if max_ts is not None:
+                params["max_ts"] = max_ts
+            if cursor:
+                params["cursor"] = cursor
+
+            try:
+                response = await self._http_client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
+
+            trades = data.get("trades", [])
+            if not trades:
+                break
+
+            for trade_data in trades:
+                if yielded >= limit:
+                    return
+                try:
+                    trade = self._parse_trade(outcome_id, trade_data)
+                    yield trade
+                    yielded += 1
+                except (KeyError, ValueError):
+                    continue
+
+            cursor = data.get("cursor")
+            if not cursor:
+                break
+
+    async def iter_trades(
+        self,
+        outcome_id: str,
+        *,
+        min_ts: int | None = None,
+        max_ts: int | None = None,
+    ) -> AsyncIterator[Trade]:
+        """Iterate all historical trades for an outcome (unbounded).
+
+        Args:
+            outcome_id: Kalshi ticker
+            min_ts: Filter trades after this Unix timestamp (milliseconds)
+            max_ts: Filter trades before this Unix timestamp (milliseconds)
+
+        Yields:
+            Trade objects (all available)
         """
         url = f"{self.API_BASE}/markets/trades"
         params: dict[str, Any] = {
             "ticker": outcome_id,
-            "limit": limit,
+            "limit": 200,  # Max per request
         }
 
         if min_ts is not None:

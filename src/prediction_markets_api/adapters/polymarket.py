@@ -10,7 +10,12 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
-from prediction_markets_api.exceptions import NotFoundError, RateLimitError, VenueAPIError
+from prediction_markets_api.exceptions import (
+    NoLiquidityError,
+    NotFoundError,
+    RateLimitError,
+    VenueAPIError,
+)
 from prediction_markets_api.models.base import (
     Currency,
     Market,
@@ -414,10 +419,12 @@ class PolymarketClient(BaseClient):
 
         raw_price = data.get("price")
         if raw_price is None:
-            raise NotFoundError(
+            # Polymarket CLOB returns 200 with null price for both invalid IDs and no liquidity
+            # We can't distinguish, so raise NoLiquidityError
+            raise NoLiquidityError(
                 f"No liquidity for {side.value} on outcome {outcome_id}",
-                resource_type="outcome",
-                resource_id=outcome_id,
+                market_id=outcome_id,
+                side=side.value,
             )
 
         normalized_price = Decimal(str(raw_price))
@@ -437,26 +444,115 @@ class PolymarketClient(BaseClient):
         outcome_id: str,
         limit: int = 100,
         *,
+        page_size: int = 100,
         start_ts: int | None = None,
         end_ts: int | None = None,
     ) -> AsyncIterator[Trade]:
-        """Get historical trades for an outcome.
+        """Get historical trades for an outcome (bounded).
 
         Uses Data API v2 /trades endpoint.
 
         Args:
             outcome_id: Polymarket token_id
-            limit: Results per page
+            limit: Maximum total trades to return (default 100)
+            page_size: Results per API request (default 100, max 1000)
             start_ts: Filter trades after this Unix timestamp (seconds)
             end_ts: Filter trades before this Unix timestamp (seconds)
 
         Yields:
-            Trade objects
+            Trade objects (up to `limit` total)
+        """
+        url = f"{self.DATA_API_BASE}/trades"
+        
+        yielded = 0
+        cursor: str | None = None
+
+        while yielded < limit:
+            # Request min(remaining, page_size) items
+            request_limit = min(limit - yielded, page_size, 1000)
+            
+            params: dict[str, Any] = {
+                "asset_id": outcome_id,
+                "limit": request_limit,
+            }
+
+            if start_ts is not None:
+                params["start_ts"] = start_ts
+            if end_ts is not None:
+                params["end_ts"] = end_ts
+            if cursor:
+                params["cursor"] = cursor
+
+            try:
+                response = await self._http_client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+
+            trades = data.get("data", [])
+            if not trades:
+                break
+
+            for trade_data in trades:
+                if yielded >= limit:
+                    return
+                try:
+                    trade = self._parse_trade(outcome_id, trade_data)
+                    yield trade
+                    yielded += 1
+                except (KeyError, ValueError):
+                    continue
+
+            cursor = data.get("next_cursor")
+            if not cursor:
+                break
+
+    async def iter_trades(
+        self,
+        outcome_id: str,
+        *,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
+    ) -> AsyncIterator[Trade]:
+        """Iterate all historical trades for an outcome (unbounded).
+
+        Args:
+            outcome_id: Polymarket token_id
+            start_ts: Filter trades after this Unix timestamp (seconds)
+            end_ts: Filter trades before this Unix timestamp (seconds)
+
+        Yields:
+            Trade objects (all available)
         """
         url = f"{self.DATA_API_BASE}/trades"
         params: dict[str, Any] = {
             "asset_id": outcome_id,
-            "limit": limit,
+            "limit": 1000,  # Max per request
         }
 
         if start_ts is not None:

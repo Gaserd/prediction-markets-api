@@ -79,3 +79,25 @@ class RateLimitError(VenueAPIError):
         """
         super().__init__(message, status_code=429, venue=venue, url=url)
         self.retry_after = retry_after
+
+
+class NoLiquidityError(PredictionMarketsError):
+    """No liquidity available (empty order book for an existing market)."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        market_id: str | None = None,
+        side: str | None = None,
+    ):
+        """Initialize NoLiquidityError.
+
+        Args:
+            message: Error message
+            market_id: Market identifier
+            side: Order side (BUY/SELL) if applicable
+        """
+        super().__init__(message)
+        self.market_id = market_id
+        self.side = side

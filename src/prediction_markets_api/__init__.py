@@ -4,6 +4,7 @@ from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.limitless import LimitlessClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
 from prediction_markets_api.exceptions import (
+    NoLiquidityError,
     NotFoundError,
     PredictionMarketsError,
     RateLimitError,
@@ -38,4 +39,5 @@ __all__ = [
     "NotFoundError",
     "VenueAPIError",
     "RateLimitError",
+    "NoLiquidityError",
 ]

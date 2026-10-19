@@ -19,7 +19,12 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
-from prediction_markets_api.exceptions import NotFoundError, RateLimitError, VenueAPIError
+from prediction_markets_api.exceptions import (
+    NoLiquidityError,
+    NotFoundError,
+    RateLimitError,
+    VenueAPIError,
+)
 from prediction_markets_api.models.base import (
     Currency,
     Market,
@@ -299,13 +304,35 @@ class LimitlessClient(BaseClient):
 
         if side == OrderSide.BUY:
             if not order_book.asks:
-                raise ValueError(f"No liquidity to buy (no asks) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to buy (no asks) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="BUY",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.asks[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
         else:
             if not order_book.bids:
-                raise ValueError(f"No liquidity to sell (no bids) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to sell (no bids) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="SELL",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.bids[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
@@ -324,23 +351,21 @@ class LimitlessClient(BaseClient):
         self,
         outcome_id: str,
         limit: int = 100,
-        *,
-        page: int = 1,
     ) -> AsyncIterator[Trade]:
-        """Get historical trades for an outcome.
+        """Get historical trades for an outcome (bounded).
+
+        Note: Limitless API returns one page only, no pagination available.
 
         Args:
             outcome_id: Limitless slug
-            limit: Results per page (max 100)
-            page: Page number for pagination
+            limit: Maximum trades to return (default 100, max 100)
 
         Yields:
-            Trade objects
+            Trade objects (up to `limit` total, max 100 from API)
         """
         url = f"{self.API_BASE}/markets/{outcome_id}/events"
         params: dict[str, Any] = {
             "limit": min(limit, 100),
-            "page": page,
         }
 
         try:
@@ -375,12 +400,34 @@ class LimitlessClient(BaseClient):
             ) from e
 
         events = data.get("events", [])
+        yielded = 0
         for event_data in events:
+            if yielded >= limit:
+                return
             try:
                 trade = self._parse_trade(outcome_id, event_data)
                 yield trade
+                yielded += 1
             except (KeyError, ValueError):
                 continue
+
+    async def iter_trades(
+        self,
+        outcome_id: str,
+    ) -> AsyncIterator[Trade]:
+        """Iterate all available trades for an outcome.
+
+        Note: Limitless API returns one page only (max 100), no pagination available.
+        This is equivalent to get_trades(outcome_id, limit=100).
+
+        Args:
+            outcome_id: Limitless slug
+
+        Yields:
+            Trade objects (max 100 from API)
+        """
+        async for trade in self.get_trades(outcome_id, limit=100):
+            yield trade
 
     async def place_order(
         self,
