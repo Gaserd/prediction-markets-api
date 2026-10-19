@@ -3,6 +3,12 @@
 from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.limitless import LimitlessClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
+from prediction_markets_api.exceptions import (
+    NotFoundError,
+    PredictionMarketsError,
+    RateLimitError,
+    VenueAPIError,
+)
 from prediction_markets_api.models.base import (
     Currency,
     Market,
@@ -28,4 +34,8 @@ __all__ = [
     "Price",
     "Trade",
     "Currency",
+    "PredictionMarketsError",
+    "NotFoundError",
+    "VenueAPIError",
+    "RateLimitError",
 ]

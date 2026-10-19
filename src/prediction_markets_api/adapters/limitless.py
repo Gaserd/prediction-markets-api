@@ -19,6 +19,7 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.exceptions import NotFoundError, RateLimitError, VenueAPIError
 from prediction_markets_api.models.base import (
     Currency,
     Market,
@@ -76,7 +77,7 @@ class LimitlessClient(BaseClient):
         """List markets using Limitless API page pagination.
 
         Args:
-            closed: Filter by closed status (None = all, False = active only)
+            closed: Filter by closed status (None = all, False = active only, True = not supported)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 25)
             venue_params: Venue-specific parameters as a dict (optional, unused by Limitless)
@@ -85,8 +86,16 @@ class LimitlessClient(BaseClient):
             Market objects (up to `limit` total)
 
         Raises:
+            NotImplementedError: If closed=True (Limitless API only provides /markets/active)
             ValueError: If API returns invalid data
         """
+        if closed is True:
+            raise NotImplementedError(
+                "Limitless API does not provide an endpoint for listing closed or resolved markets. "
+                "Only active markets are available via /markets/active. "
+                "Use closed=False or closed=None to list active markets."
+            )
+
         url = f"{self.API_BASE}/markets/active"
         params: dict[str, Any] = {"limit": min(page_size, 25)}
 
@@ -382,8 +391,13 @@ class LimitlessClient(BaseClient):
                 "This status will not be normalized."
             )
 
-        # Market is resolved if status is RESOLVED or has a result
-        resolved = venue_status.upper() == "RESOLVED" or result is not None or expired
+        # Market is resolved only if status is RESOLVED or has a result
+        # Expiry alone does not mean resolution
+        resolved = venue_status.upper() == "RESOLVED" or result is not None
+
+        # If market is expired but not resolved, it should be CLOSED
+        if expired and not resolved and status == MarketStatus.OPEN:
+            status = MarketStatus.CLOSED
 
         volume = None
         volume_str = data.get("volumeFormatted")

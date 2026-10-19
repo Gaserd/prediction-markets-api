@@ -10,6 +10,7 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.exceptions import NotFoundError, RateLimitError, VenueAPIError
 from prediction_markets_api.models.base import (
     Currency,
     Market,
@@ -100,8 +101,32 @@ class PolymarketClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch markets: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch markets: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching markets: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
 
             markets = data.get("markets", [])
             if not markets:
@@ -151,12 +176,46 @@ class PolymarketClient(BaseClient):
             response = await self._http_client.get(url, params=params)  # type: ignore[arg-type]
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch market {market_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Market not found: {market_id}",
+                    resource_type="market",
+                    resource_id=market_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch market {market_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching market {market_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for market {market_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
 
         markets = data.get("markets", [])
         if not markets:
-            raise ValueError(f"Market {market_id} not found")
+            raise NotFoundError(
+                f"Market not found: {market_id}",
+                resource_type="market",
+                resource_id=market_id,
+            )
 
         return self._parse_market(markets[0])
 
@@ -179,8 +238,38 @@ class PolymarketClient(BaseClient):
             response = await self._http_client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch order book for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Order book not found for outcome: {outcome_id}",
+                    resource_type="outcome",
+                    resource_id=outcome_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch order book for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching order book for {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for order book {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
 
         order_book = self._parse_order_book(outcome_id, data)
         order_book.validate_not_crossed()
@@ -217,8 +306,32 @@ class PolymarketClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch tokens: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch tokens: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching tokens: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for tokens: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
 
             tokens: list[dict[str, Any]] = data.get("data", [])
             results.extend(tokens)
@@ -261,12 +374,46 @@ class PolymarketClient(BaseClient):
             response = await self._http_client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch price for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Outcome not found: {outcome_id}",
+                    resource_type="outcome",
+                    resource_id=outcome_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch price for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching price for {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for price {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
 
         raw_price = data.get("price")
         if raw_price is None:
-            raise ValueError(f"No liquidity for {side.value} on outcome {outcome_id}")
+            raise NotFoundError(
+                f"No liquidity for {side.value} on outcome {outcome_id}",
+                resource_type="outcome",
+                resource_id=outcome_id,
+            )
 
         normalized_price = Decimal(str(raw_price))
 
@@ -322,8 +469,32 @@ class PolymarketClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch trades for {outcome_id}: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
 
             trades = data.get("data", [])
             if not trades:
@@ -464,6 +635,7 @@ class PolymarketClient(BaseClient):
             pass
 
         # Determine venue_status and normalized status
+        # Price-based resolution detection only applies to closed markets
         if closed_flag:
             if is_resolved:
                 venue_status = "resolved"
@@ -474,6 +646,9 @@ class PolymarketClient(BaseClient):
         else:
             venue_status = "open"
             status = MarketStatus.OPEN
+            # Open markets are never resolved, even if prices are near 0/1
+            is_resolved = False
+            winning_outcome_index = None
 
         resolved = is_resolved
 

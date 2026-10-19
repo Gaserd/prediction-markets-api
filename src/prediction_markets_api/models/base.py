@@ -11,7 +11,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class OrderSide(str, Enum):
@@ -122,6 +122,34 @@ class Market(BaseModel):
         if v.tzinfo is None:
             raise ValueError("Timestamps must be timezone-aware UTC")
         return v
+
+    @model_validator(mode="after")
+    def validate_resolution_invariants(self) -> "Market":
+        """Enforce resolution invariants across all adapters.
+
+        Invariant 1: resolved=True if and only if status==RESOLVED
+        Invariant 2: winning_outcome is only set when resolved=True
+        """
+        # Invariant 1: resolved and status must agree
+        if self.status == MarketStatus.RESOLVED and not self.resolved:
+            raise ValueError(
+                f"Market {self.id}: status=RESOLVED but resolved=False. "
+                "Invariant violation: resolved must be True when status is RESOLVED."
+            )
+        if self.resolved and self.status != MarketStatus.RESOLVED:
+            raise ValueError(
+                f"Market {self.id}: resolved=True but status={self.status}. "
+                "Invariant violation: resolved=True if and only if status=RESOLVED."
+            )
+
+        # Invariant 2: winning_outcome only when resolved
+        if self.winning_outcome is not None and not self.resolved:
+            raise ValueError(
+                f"Market {self.id}: winning_outcome='{self.winning_outcome}' but resolved=False. "
+                "Invariant violation: winning_outcome should only be set when resolved=True."
+            )
+
+        return self
 
     @field_validator("volume", "liquidity", mode="before")
     @classmethod

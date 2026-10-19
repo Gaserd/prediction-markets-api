@@ -215,24 +215,28 @@ async def test_place_order_requires_api_keys():
 @pytest.mark.asyncio
 async def test_market_not_found(respx_mock):
     """Test handling of market not found."""
+    from prediction_markets_api.exceptions import NotFoundError
+
     respx_mock.get("https://gamma-api.polymarket.com/markets").mock(
         return_value=httpx.Response(200, json={"markets": [], "nextCursor": None})
     )
 
     async with PolymarketClient() as client:
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             await client.get_market("nonexistent_market")
 
 
 @pytest.mark.asyncio
 async def test_api_error_handling(respx_mock):
     """Test API error handling."""
+    from prediction_markets_api.exceptions import VenueAPIError
+
     respx_mock.get("https://gamma-api.polymarket.com/markets/keyset").mock(
         return_value=httpx.Response(500, text="Internal Server Error")
     )
 
     async with PolymarketClient() as client:
-        with pytest.raises(ValueError, match="Failed to fetch markets"):
+        with pytest.raises(VenueAPIError, match="Failed to fetch markets"):
             markets = []
             async for market in client.list_markets():
                 markets.append(market)
