@@ -135,7 +135,7 @@ async def test_get_price_live():
                 if book.bids or book.asks:
                     ticker_with_liquidity = market.id
                     break
-            except (ValueError, NoLiquidityError):
+            except NoLiquidityError:
                 continue
 
         if not ticker_with_liquidity:
@@ -181,7 +181,7 @@ async def test_get_trades_live():
         try:
             async for trade in client.get_trades(ticker, limit=5):
                 trades.append(trade)
-        except (ValueError, NoLiquidityError):
+        except NoLiquidityError:
             # Trades endpoint may not exist for all markets
             pass
 

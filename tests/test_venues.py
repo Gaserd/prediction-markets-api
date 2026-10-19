@@ -57,7 +57,9 @@ async def test_limitless_raises_not_implemented_for_closed_markets():
     """Test that Limitless raises NotImplementedError when closed=True."""
     client = LimitlessClient()
 
-    with pytest.raises(NotImplementedError, match="Limitless only exposes /markets/active"):
+    with pytest.raises(
+        NotImplementedError, match="Limitless API does not provide an endpoint for listing closed"
+    ):
         async for _ in client.list_markets(closed=True):
             pass
 
