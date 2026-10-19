@@ -1244,53 +1244,147 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
 
 
 @pytest.mark.asyncio
-async def test_get_trades_limit_and_pagination(adapter_config, adapter_fixtures, adapter_client):
-    """Verify get_trades(limit) returns at most N trades and stops paging.
+async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
+    """Verify get_trades(limit) returns exactly N trades and stops paging.
 
     Contract:
-    - get_trades(limit=N) returns at most N trades total
+    - get_trades(limit=N) returns exactly N trades (if available) and stops paging
     - Default limit is 100
     - iter_trades() paginates until exhausted (no limit)
+    - No page requested after limit is reached
     """
-    if "trades_response" not in adapter_fixtures:
-        pytest.skip(f"No trades fixture for {adapter_config.name}")
+    # Build 3 pages × 50 synthetic trades each = 150 total
+    def build_trade(index: int) -> dict:
+        if adapter_config.name == "polymarket":
+            return {
+                "proxy_wallet": f"0x{index:040x}",
+                "side": "BUY" if index % 2 == 0 else "SELL",
+                "token_id": "test_token_123",
+                "size": 10.0 + index,
+                "price": 0.5 + (index % 10) * 0.01,
+                "timestamp": 1791697593 + index,
+                "outcome": "Yes",
+            }
+        elif adapter_config.name == "kalshi":
+            return {
+                "trade_id": str(1000 + index),
+                "yes_price": 50 + (index % 50),
+                "count": 1,
+                "created_time": f"2026-10-10T06:{index%60:02d}:00Z",
+                "taker_side": "yes" if index % 2 == 0 else "no",
+            }
+        elif adapter_config.name == "limitless":
+            return {
+                "address": f"0x{index:040x}",
+                "type": "BUY" if index % 2 == 0 else "SELL",
+                "price": 0.5 + (index % 10) * 0.01,
+                "size": (10 + index) * 1000000,  # 6-decimal units
+                "timestamp": 1791697593 + index,
+            }
 
-    data = adapter_fixtures["trades_response"]["data"]
-    meta = adapter_fixtures["trades_response"]["meta"]
+    outcome_id = "test_market_123"
 
-    # Extract market/outcome ID
-    outcome_id = None
-    if meta:
-        outcome_id = meta.get("token_id") or meta.get("ticker") or meta.get("market_id")
+    # Build static pages
+    pages = []
+    if adapter_config.name == "limitless":
+        # Limitless: single page only (no pagination), cap at 100
+        trades_page = [build_trade(i) for i in range(100)]
+        pages.append({"events": trades_page})
+    else:
+        # Polymarket/Kalshi: 3 pages × 50 each = 150 total
+        for page_num in range(1, 4):  # 3 pages
+            start_idx = (page_num - 1) * 50
+            trades_page = [build_trade(i) for i in range(start_idx, start_idx + 50)]
 
-    if not outcome_id:
-        pytest.skip(f"Cannot determine outcome_id for {adapter_config.name}")
+            if adapter_config.name == "polymarket":
+                next_cursor = f"cursor_{page_num}" if page_num < 3 else None
+                pages.append({"data": trades_page, "next_cursor": next_cursor})
+            elif adapter_config.name == "kalshi":
+                next_cursor = f"cursor_{page_num}" if page_num < 3 else None
+                pages.append({"trades": trades_page, "cursor": next_cursor})
 
     with respx.mock:
-        # Mock trades endpoint to return the fixture data in correct format
-        if adapter_config.name == "polymarket":
-            # Polymarket: fixture has {"data": [...]}
-            respx.get(url__regex=r".*/trades.*").mock(return_value=Response(200, json=data))
-        elif adapter_config.name == "kalshi":
-            # Kalshi: fixture is {"trades": [...], "cursor": null}
-            respx.get(url__regex=r".*/trades.*").mock(return_value=Response(200, json=data))
-        elif adapter_config.name == "limitless":
-            # Limitless: fixture is array [...]
-            respx.get(url__regex=r".*/events.*").mock(return_value=Response(200, json=data))
+        # Track which page to return
+        page_index = [0]
 
-        # Test with explicit limit=5 (get_trades returns async generator)
+        def get_next_page(request):
+            idx = page_index[0]
+            page_index[0] += 1
+            if idx < len(pages):
+                return Response(200, json=pages[idx])
+            else:
+                # Return empty if beyond available pages
+                if adapter_config.name == "polymarket":
+                    return Response(200, json={"data": [], "next_cursor": None})
+                elif adapter_config.name == "kalshi":
+                    return Response(200, json={"trades": [], "cursor": None})
+                else:
+                    return Response(200, json={"events": []})
+
+        # Set up route with side_effect
+        if adapter_config.name == "polymarket":
+            route = respx.get(url__regex=r".*/trades.*").mock(side_effect=get_next_page)
+        elif adapter_config.name == "kalshi":
+            route = respx.get(url__regex=r".*/trades.*").mock(side_effect=get_next_page)
+        elif adapter_config.name == "limitless":
+            route = respx.get(url__regex=r".*/events.*").mock(side_effect=get_next_page)
+
+        # Test with explicit limit=5 (should fetch exactly 5 from first page)
+        page_index[0] = 0
         trades = []
         async for trade in adapter_client.get_trades(outcome_id, limit=5):
             trades.append(trade)
-        assert len(trades) <= 5, f"get_trades(limit=5) returned {len(trades)} trades, expected ≤5"
 
-        # Test default limit (should be 100)
+        assert len(trades) == 5, f"get_trades(limit=5) returned {len(trades)} trades, expected exactly 5"
+        assert route.call_count == 1, (
+            f"get_trades(limit=5) made {route.call_count} requests, expected 1 (should stop after first page)"
+        )
+
+        # Test default limit=100
+        page_index[0] = 0
+        route.calls.clear()
         trades_default = []
         async for trade in adapter_client.get_trades(outcome_id):
             trades_default.append(trade)
-        assert len(trades_default) <= 100, (
-            f"get_trades() without limit returned {len(trades_default)} trades, expected ≤100 (default)"
-        )
+
+        if adapter_config.name == "limitless":
+            # Limitless: single page, capped at 100
+            assert len(trades_default) == 100, (
+                f"get_trades() without limit returned {len(trades_default)} trades, expected 100 (Limitless caps at 100)"
+            )
+            assert route.call_count == 1, (
+                f"get_trades(limit=100) made {route.call_count} requests, expected 1 (Limitless: no pagination)"
+            )
+        else:
+            # Polymarket/Kalshi: should fetch exactly 100 from 2 pages (50+50)
+            assert len(trades_default) == 100, (
+                f"get_trades() without limit returned {len(trades_default)} trades, expected exactly 100 (default)"
+            )
+            assert route.call_count == 2, (
+                f"get_trades(limit=100) made {route.call_count} requests, expected 2 (50+50, should stop)"
+            )
+
+        # Test iter_trades() paginates until exhausted
+        page_index[0] = 0
+        route.calls.clear()
+        all_trades = []
+        async for trade in adapter_client.iter_trades(outcome_id):
+            all_trades.append(trade)
+
+        if adapter_config.name == "limitless":
+            assert len(all_trades) == 100, (
+                f"iter_trades() returned {len(all_trades)} trades, expected 100 (Limitless: single page, capped)"
+            )
+            assert route.call_count == 1, (
+                f"iter_trades() made {route.call_count} requests, expected 1 (Limitless: no pagination)"
+            )
+        else:
+            assert len(all_trades) == 150, (
+                f"iter_trades() returned {len(all_trades)} trades, expected 150 (all 3 pages)"
+            )
+            assert route.call_count == 3, (
+                f"iter_trades() made {route.call_count} requests, expected 3 (all pages)"
+            )
 
 
 # =============================================================================
