@@ -382,3 +382,16 @@ async def test_resolved_market_with_result():
         market = client._parse_market(market_data)
         assert market.resolved is True
         assert market.winning_outcome == "No"
+
+
+@pytest.mark.asyncio
+async def test_closed_true_raises_not_implemented():
+    """Test that closed=True raises NotImplementedError.
+
+    Limitless API only provides /markets/active endpoint.
+    Returning active markets when closed=True was silently wrong.
+    """
+    async with LimitlessClient() as client:
+        with pytest.raises(NotImplementedError, match="does not provide an endpoint"):
+            async for _ in client.list_markets(closed=True, limit=1):
+                pass

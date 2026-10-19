@@ -17,7 +17,6 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
-from prediction_markets_api.exceptions import NotFoundError, RateLimitError, VenueAPIError
 from prediction_markets_api.models.base import (
     Currency,
     Market,

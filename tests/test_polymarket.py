@@ -633,3 +633,34 @@ async def test_closed_vs_resolved_distinction():
         assert market.status == MarketStatus.RESOLVED
         assert market.resolved is True
         assert market.winning_outcome == "No"
+
+
+@pytest.mark.asyncio
+async def test_open_near_certain_market_not_resolved():
+    """Test that open markets with near-certain prices stay OPEN and unresolved.
+
+    Regression test for QA blocker: open markets trading at 0.999/0.001
+    (e.g., long-dated 2028 elections) were incorrectly marked as resolved.
+    Price-based resolution detection must only apply to closed markets.
+    """
+    import json
+    from pathlib import Path
+
+    fixture_path = Path(__file__).parent / "fixtures" / "polymarket" / "open_near_certain.json"
+    with open(fixture_path) as f:
+        market_data = json.load(f)
+
+    async with PolymarketClient() as client:
+        market = client._parse_market(market_data)
+
+    # Market is open and near-certain (0.9995/0.0005)
+    assert market.status == MarketStatus.OPEN
+    assert market.venue_status == "open"
+    assert market.resolved is False
+    assert market.winning_outcome is None
+
+    # Check prices are preserved
+    assert len(market.outcomes) == 2
+    yes_outcome = market.outcomes[0]
+    assert yes_outcome.name == "Yes"
+    assert yes_outcome.price >= Decimal("0.999")

@@ -61,46 +61,85 @@ asyncio.run(main())
 ### Getting Prices
 
 ```python
+import asyncio
 from prediction_markets_api import PolymarketClient
 from prediction_markets_api.models.base import OrderSide
 
-async with PolymarketClient() as client:
-    # Get best executable prices
-    buy_price = await client.get_price(outcome_id="token_id", side=OrderSide.BUY)
-    sell_price = await client.get_price(outcome_id="token_id", side=OrderSide.SELL)
-    
-    print(f"Best ask (to buy): {buy_price.price:.4f}")
-    print(f"Best bid (to sell): {sell_price.price:.4f}")
+
+async def main():
+    async with PolymarketClient() as client:
+        # Get first market with outcomes
+        async for market in client.list_markets(closed=False, limit=10):
+            if market.outcomes:
+                outcome = market.outcomes[0]
+                break
+
+        # Get best executable prices
+        buy_price = await client.get_price(outcome_id=outcome.id, side=OrderSide.BUY)
+        sell_price = await client.get_price(outcome_id=outcome.id, side=OrderSide.SELL)
+
+        print(f"Best ask (to buy): {buy_price.price:.4f}")
+        print(f"Best bid (to sell): {sell_price.price:.4f}")
+
+
+asyncio.run(main())
 ```
 
 ### Placing Orders (Dry-Run by Default)
 
 ```python
+import asyncio
 from decimal import Decimal
 from prediction_markets_api import PolymarketClient
 from prediction_markets_api.models.base import OrderSide
 
-async with PolymarketClient(max_order_size=Decimal("1000")) as client:
-    # Dry-run mode (default): validates but doesn't send
-    result = await client.place_order(
-        outcome_id="token_id",
-        side=OrderSide.BUY,
-        size=Decimal("100"),
-        price=Decimal("0.65"),
-        dry_run=True,  # Default: safe simulation
-    )
-    print(result)  # {'dry_run': True, 'status': 'simulated', ...}
-    
-    # Real orders require explicit opt-in + API keys
-    # result = await client.place_order(..., dry_run=False)
+
+async def main():
+    async with PolymarketClient(max_order_size=Decimal("1000")) as client:
+        # Get first market with outcomes
+        async for market in client.list_markets(closed=False, limit=10):
+            if market.outcomes:
+                outcome = market.outcomes[0]
+                break
+
+        # Dry-run mode (default): validates but doesn't send
+        result = await client.place_order(
+            outcome_id=outcome.id,
+            side=OrderSide.BUY,
+            size=Decimal("100"),
+            price=Decimal("0.65"),
+            dry_run=True,  # Default: safe simulation
+        )
+        print(result)  # {'dry_run': True, 'status': 'simulated', ...}
+
+        # Real orders require explicit opt-in + API keys
+        # result = await client.place_order(..., dry_run=False)
+
+
+asyncio.run(main())
 ```
 
 ### Getting Historical Trades
 
 ```python
-async with PolymarketClient() as client:
-    async for trade in client.get_trades(outcome_id="token_id", limit=10):
-        print(f"{trade.timestamp}: {trade.side.value} {trade.size} @ {trade.price}")
+import asyncio
+from prediction_markets_api import PolymarketClient
+
+
+async def main():
+    async with PolymarketClient() as client:
+        # Get first market with outcomes
+        async for market in client.list_markets(closed=False, limit=10):
+            if market.outcomes:
+                outcome = market.outcomes[0]
+                break
+
+        # Get historical trades
+        async for trade in client.get_trades(outcome_id=outcome.id, limit=10):
+            print(f"{trade.timestamp}: {trade.side.value} {trade.size} @ {trade.price}")
+
+
+asyncio.run(main())
 ```
 
 ## How It Works
@@ -156,24 +195,31 @@ All venues return data through a unified model with strict guarantees:
 
 **Notes:**
 - Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
+- Kalshi resolved markets with `result='scalar'` (e.g., cancelled events): These are marked as `resolved=True` with `status=RESOLVED` but `winning_outcome=None` since no yes/no outcome won. This is acceptable and documented.
 - Polymarket resolution detection:
   - No explicit resolution status fields in API response (umaResolutionStatuses always empty, resolvedBy/resolutionSource not status indicators)
   - Resolution determined by strict price settlement check: >0.999 and <0.001 thresholds
   - This minimizes false positives from markets trading near certainty but not yet formally resolved
   - Winning outcome automatically detected from settled prices
-- Limitless only exposes `FUNDED` markets via `/markets/active` endpoint.
+- Limitless only exposes `FUNDED` markets via `/markets/active` endpoint. Calling `list_markets(closed=True)` raises `NotImplementedError` with a clear explanation, since the API does not provide an endpoint for closed/resolved markets.
 
 ### Adapter Architecture
 
 Each venue implements the `BaseClient` interface:
 
 ```python
+import asyncio
 from prediction_markets_api import PolymarketClient, KalshiClient
 
-# All clients provide the same methods:
-async with PolymarketClient() as client:
-    async for market in client.list_markets(limit=10):  # Standard method
-        print(market.question)
+
+async def main():
+    # All clients provide the same methods:
+    async with PolymarketClient() as client:
+        async for market in client.list_markets(limit=10):  # Standard method
+            print(market.question)
+
+
+asyncio.run(main())
 ```
 
 **Unified Methods:**
@@ -214,12 +260,31 @@ export KALSHI_API_SECRET="your_secret"
 Trading has safe defaults:
 
 ```python
-# Default: dry_run=True (safe simulation)
-result = await client.place_order(outcome_id, OrderSide.BUY, size, price)
-# → {'dry_run': True, 'status': 'simulated', ...}
+import asyncio
+from decimal import Decimal
+from prediction_markets_api import PolymarketClient
+from prediction_markets_api.models.base import OrderSide
 
-# Real orders require explicit opt-in
-result = await client.place_order(..., dry_run=False)
+
+async def main():
+    async with PolymarketClient() as client:
+        # Get first market with outcomes
+        async for market in client.list_markets(closed=False, limit=10):
+            if market.outcomes:
+                outcome_id = market.outcomes[0].id
+                break
+
+        # Default: dry_run=True (safe simulation)
+        result = await client.place_order(
+            outcome_id, OrderSide.BUY, Decimal("100"), Decimal("0.65")
+        )
+        print(result)  # {'dry_run': True, 'status': 'simulated', ...}
+
+        # Real orders require explicit opt-in
+        # result = await client.place_order(..., dry_run=False)
+
+
+asyncio.run(main())
 ```
 
 ### Geographic Restrictions
@@ -228,6 +293,56 @@ Be aware of venue restrictions:
 - **Polymarket**: US users blocked
 - **Kalshi**: US only (CFTC regulated)
 - **Limitless**: No restrictions (planned)
+
+### Exception Hierarchy
+
+The library provides a consistent exception hierarchy:
+
+```python
+from prediction_markets_api import (
+    PredictionMarketsError,  # Base exception
+    NotFoundError,  # Market/outcome/token not found
+    VenueAPIError,  # HTTP errors, invalid responses
+    RateLimitError,  # HTTP 429 rate limit
+)
+```
+
+**Exception Types:**
+
+- **`PredictionMarketsError`**: Base exception for all library errors
+- **`NotFoundError`**: Resource not found (markets, outcomes, tokens)
+  - Attributes: `resource_type`, `resource_id`
+  - Raised on HTTP 404 or empty results
+- **`VenueAPIError`**: HTTP errors, timeouts, invalid JSON responses
+  - Attributes: `status_code`, `venue`, `url`
+  - Wraps all `httpx` errors for consistent handling
+- **`RateLimitError`**: Rate limit exceeded (HTTP 429)
+  - Subclass of `VenueAPIError`
+  - Attributes: `retry_after` (seconds, from Retry-After header if available)
+
+**User Input Errors:**
+- `ValueError`: Invalid parameters (e.g., price not in 0..1, negative size)
+- `NotImplementedError`: Unsupported operations (e.g., `LimitlessClient.list_markets(closed=True)`)
+
+**Example:**
+
+```python
+import asyncio
+from prediction_markets_api import PolymarketClient, NotFoundError, VenueAPIError
+
+
+async def main():
+    async with PolymarketClient() as client:
+        try:
+            market = await client.get_market("nonexistent")
+        except NotFoundError as e:
+            print(f"Market not found: {e.resource_id}")
+        except VenueAPIError as e:
+            print(f"API error: {e.status_code} from {e.venue}")
+
+
+asyncio.run(main())
+```
 
 ## Data Model
 
@@ -257,7 +372,11 @@ All venues return data through a unified model:
 ### Example: Market Object
 
 ```python
-Market(
+from datetime import datetime, timezone
+from decimal import Decimal
+from prediction_markets_api.models.base import Market, Outcome, Currency
+
+market = Market(
     id="0x1234...",
     venue="polymarket",
     question="Will Bitcoin reach $100k by Dec 31?",
@@ -271,6 +390,7 @@ Market(
     currency=Currency.USDC,
     partial=False,
 )
+print(market.question)
 ```
 
 ## Examples

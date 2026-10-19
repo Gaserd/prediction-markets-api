@@ -8,7 +8,9 @@ class PredictionMarketsError(Exception):
 class NotFoundError(PredictionMarketsError):
     """Resource not found (e.g., market, token, outcome)."""
 
-    def __init__(self, message: str, *, resource_type: str | None = None, resource_id: str | None = None):
+    def __init__(
+        self, message: str, *, resource_type: str | None = None, resource_id: str | None = None
+    ):
         """Initialize NotFoundError.
 
         Args:

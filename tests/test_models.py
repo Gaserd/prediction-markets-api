@@ -8,6 +8,7 @@ import pytest
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -235,3 +236,60 @@ def test_all_model_datetimes_are_utc_aware():
     except ValueError:
         # It's also acceptable to reject naive datetimes
         pass
+
+
+def test_resolution_invariant_resolved_without_resolved_status():
+    """Test that resolved=True requires status=RESOLVED."""
+    from datetime import datetime, timezone
+
+    utc_dt = datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Try to create market with resolved=True but status != RESOLVED
+    with pytest.raises(ValueError, match="resolved=True if and only if status=RESOLVED"):
+        Market(
+            id="test",
+            venue="test",
+            question="Test?",
+            outcomes=[],
+            created_at=utc_dt,
+            resolved=True,  # resolved=True
+            status=MarketStatus.OPEN,  # but status=OPEN
+        )
+
+
+def test_resolution_invariant_resolved_status_without_resolved():
+    """Test that status=RESOLVED requires resolved=True."""
+    from datetime import datetime, timezone
+
+    utc_dt = datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Try to create market with status=RESOLVED but resolved=False
+    with pytest.raises(ValueError, match="resolved must be True when status is RESOLVED"):
+        Market(
+            id="test",
+            venue="test",
+            question="Test?",
+            outcomes=[],
+            created_at=utc_dt,
+            status=MarketStatus.RESOLVED,  # status=RESOLVED
+            resolved=False,  # but resolved=False
+        )
+
+
+def test_resolution_invariant_winning_outcome_without_resolved():
+    """Test that winning_outcome requires resolved=True."""
+    from datetime import datetime, timezone
+
+    utc_dt = datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Try to create market with winning_outcome but resolved=False
+    with pytest.raises(ValueError, match="winning_outcome should only be set when resolved=True"):
+        Market(
+            id="test",
+            venue="test",
+            question="Test?",
+            outcomes=[],
+            created_at=utc_dt,
+            winning_outcome="Yes",  # has winner
+            resolved=False,  # but not resolved
+        )
