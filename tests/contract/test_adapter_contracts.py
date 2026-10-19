@@ -1253,6 +1253,7 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
     - iter_trades() paginates until exhausted (no limit)
     - No page requested after limit is reached
     """
+
     # Build 3 pages × 50 synthetic trades each = 150 total
     def build_trade(index: int) -> dict:
         if adapter_config.name == "polymarket":
@@ -1270,7 +1271,7 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                 "trade_id": str(1000 + index),
                 "yes_price": 50 + (index % 50),
                 "count": 1,
-                "created_time": f"2026-10-10T06:{index%60:02d}:00Z",
+                "created_time": f"2026-10-10T06:{index % 60:02d}:00Z",
                 "taker_side": "yes" if index % 2 == 0 else "no",
             }
         elif adapter_config.name == "limitless":
@@ -1335,7 +1336,9 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
         async for trade in adapter_client.get_trades(outcome_id, limit=5):
             trades.append(trade)
 
-        assert len(trades) == 5, f"get_trades(limit=5) returned {len(trades)} trades, expected exactly 5"
+        assert len(trades) == 5, (
+            f"get_trades(limit=5) returned {len(trades)} trades, expected exactly 5"
+        )
         assert route.call_count == 1, (
             f"get_trades(limit=5) made {route.call_count} requests, expected 1 (should stop after first page)"
         )
@@ -1429,13 +1432,63 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
             # Try get_market which should raise NotFoundError for 404
             with pytest.raises(NotFoundError):
                 await adapter_client.get_market("NONEXISTENT_TICKER")
-        else:
-            # Polymarket/Limitless: 404 directly
-            respx.get(url__regex=r".*").mock(
+        elif adapter_config.name == "polymarket":
+            # Polymarket: get_market uses gamma-api.polymarket.com/markets
+            respx.get(url__regex=r"https://gamma-api\.polymarket\.com/markets.*").mock(
                 return_value=Response(404, json={"error": "not found"})
             )
             with pytest.raises(NotFoundError):
-                await adapter_client.get_order_book("NONEXISTENT_MARKET_12345")
+                await adapter_client.get_market("NONEXISTENT_CONDITION_ID")
+        elif adapter_config.name == "limitless":
+            # Limitless: /markets/{slug} returns 404
+            respx.get(url__regex=r"https://api\.limitless\.exchange/markets/.*").mock(
+                return_value=Response(404, json={"error": "not found"})
+            )
+            with pytest.raises(NotFoundError):
+                await adapter_client.get_market("nonexistent-slug")
+
+    # Test NoLiquidityError for existing market with empty orderbook (Kalshi only)
+    if adapter_config.name == "kalshi":
+        with respx.mock:
+            # Mock empty orderbook (200)
+            respx.get(url__regex=r".*/orderbook$").mock(
+                return_value=Response(200, json={"orderbook": {"yes": [], "no": []}})
+            )
+            # Mock existing market (200)
+            respx.get(url__regex=r".*/markets/[^/]+$").mock(
+                return_value=Response(
+                    200,
+                    json={
+                        "market": {
+                            "ticker": "EXISTING-TICKER",
+                            "title": "Test market",
+                            "status": "open",
+                            "result": None,
+                        }
+                    },
+                )
+            )
+
+            # Empty orderbook + existing market -> NoLiquidityError
+            with pytest.raises(NoLiquidityError):
+                await adapter_client.get_price("EXISTING-TICKER", side=OrderSide.BUY)
+
+    # Test NotFoundError for unknown ticker via get_price (Kalshi only)
+    # When orderbook is empty, get_price checks if market exists via get_market
+    if adapter_config.name == "kalshi":
+        with respx.mock:
+            # Mock empty orderbook (200)
+            respx.get(url__regex=r".*/orderbook$").mock(
+                return_value=Response(200, json={"orderbook": {"yes": [], "no": []}})
+            )
+            # Mock 404 on market lookup
+            respx.get(url__regex=r".*/markets/[^/]+$").mock(
+                return_value=Response(404, json={"error": "not found"})
+            )
+
+            # Empty orderbook + 404 market -> NotFoundError (not NoLiquidityError)
+            with pytest.raises(NotFoundError):
+                await adapter_client.get_price("NONEXISTENT-TICKER", side=OrderSide.BUY)
 
     # Test HTTP 429 -> RateLimitError
     with respx.mock:
@@ -1456,6 +1509,27 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
         with pytest.raises(VenueAPIError):
             async for _ in adapter_client.list_markets(limit=1):
                 pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason="Library bug: adapters do not validate limit<=0 (no ValueError raised)",
+)
+async def test_bad_argument_validation(adapter_config, adapter_client):
+    """Verify bad arguments raise ValueError.
+
+    Contract:
+    - limit <= 0 should raise ValueError before making any HTTP requests
+    """
+    with respx.mock as respx_mock:
+        # No routes mocked - should never reach HTTP layer
+        with pytest.raises(ValueError, match="limit"):
+            async for _ in adapter_client.list_markets(limit=0):
+                pass
+
+        # Verify no HTTP requests were made
+        assert len(respx_mock.calls) == 0, "HTTP request made despite invalid limit"
 
 
 # =============================================================================
