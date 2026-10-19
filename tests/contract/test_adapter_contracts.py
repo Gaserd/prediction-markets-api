@@ -781,20 +781,16 @@ def test_fixture_hygiene(adapter_config, adapter_fixtures):
                 elif isinstance(request, dict):
                     # Object format (Polymarket)
                     has_request_info = True
-                    assert (
-                        "url" in request
-                    ), f"Meta file {meta_file.name} request missing 'url'"
-                    assert (
-                        "method" in request
-                    ), f"Meta file {meta_file.name} request missing 'method'"
+                    assert "url" in request, f"Meta file {meta_file.name} request missing 'url'"
+                    assert "method" in request, (
+                        f"Meta file {meta_file.name} request missing 'method'"
+                    )
             elif "requests" in meta:
                 # Multiple requests format
                 has_request_info = True
                 for req in meta["requests"]:
                     assert "url" in req, f"Meta file {meta_file.name} request missing 'url'"
-                    assert (
-                        "method" in req
-                    ), f"Meta file {meta_file.name} request missing 'method'"
+                    assert "method" in req, f"Meta file {meta_file.name} request missing 'method'"
             elif "url" in meta and "method" in meta:
                 # Top-level format (Kalshi)
                 has_request_info = True
@@ -1209,7 +1205,9 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             params = dict(request.url.params)
 
             if adapter_config.name == "polymarket":
-                assert params.get("closed") == "true", "Polymarket closed=True must send closed=true"
+                assert params.get("closed") == "true", (
+                    "Polymarket closed=True must send closed=true"
+                )
             elif adapter_config.name == "kalshi":
                 # Kalshi closed=True -> makes 2 requests (status=closed, status=settled)
                 # Check first request has one of these
