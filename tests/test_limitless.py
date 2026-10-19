@@ -373,7 +373,7 @@ async def test_resolved_market_with_result():
         assert market.venue_status == "RESOLVED"
         assert market.status == MarketStatus.RESOLVED
         assert market.resolved is True
-        assert market.raw_data["winning_outcome"] == "Yes"
+        assert market.winning_outcome == "Yes"
 
         # Market with result="no"
         market_data["result"] = "no"
@@ -381,4 +381,4 @@ async def test_resolved_market_with_result():
 
         market = client._parse_market(market_data)
         assert market.resolved is True
-        assert market.raw_data["winning_outcome"] == "No"
+        assert market.winning_outcome == "No"

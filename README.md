@@ -138,6 +138,7 @@ All venues return data through a unified model with strict guarantees:
 - Each market includes `venue_status` (raw venue string) and `status` (normalized enum)
 - Normalized statuses: `MarketStatus.OPEN`, `MarketStatus.CLOSED`, `MarketStatus.RESOLVED`
 - `resolved=True` means the outcome is known (may still be settling)
+- `winning_outcome: str | None` contains the name of the winning outcome when resolved (e.g., "Yes", "No")
 - Unknown venue statuses log a warning and return `status=None` (not silently mapped)
 
 **Status Mapping Table:**
@@ -155,7 +156,11 @@ All venues return data through a unified model with strict guarantees:
 
 **Notes:**
 - Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
-- Polymarket resolution is determined by checking if outcome prices are settled to 0/1 (e.g., `["0.0001", "0.9999"]`), not just the `closed` boolean.
+- Polymarket resolution detection:
+  - No explicit resolution status fields in API response (umaResolutionStatuses always empty, resolvedBy/resolutionSource not status indicators)
+  - Resolution determined by strict price settlement check: >0.999 and <0.001 thresholds
+  - This minimizes false positives from markets trading near certainty but not yet formally resolved
+  - Winning outcome automatically detected from settled prices
 - Limitless only exposes `FUNDED` markets via `/markets/active` endpoint.
 
 ### Adapter Architecture

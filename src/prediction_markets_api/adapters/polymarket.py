@@ -430,7 +430,12 @@ class PolymarketClient(BaseClient):
         closed_flag = data.get("closed", False)
 
         # Determine if market is actually resolved by checking outcome prices
-        # A market is resolved when prices are settled to 0/1 (one outcome won)
+        # Polymarket doesn't provide explicit resolution status fields in practice
+        # (umaResolutionStatuses is always empty, resolvedBy/resolutionSource don't indicate status)
+        # Resolution is detected by checking if prices are settled to extreme values
+        #
+        # We use strict thresholds (>0.999 and <0.001) to minimize false positives
+        # from markets that trade near certainty but haven't been formally resolved yet
         outcome_prices_str = data.get("outcomePrices", "[]")
         is_resolved = False
         winning_outcome_index = None
@@ -447,11 +452,11 @@ class PolymarketClient(BaseClient):
                 p0 = float(outcome_prices_list[0])
                 p1 = float(outcome_prices_list[1])
 
-                # Check if settled (one outcome very close to 1, other very close to 0)
-                if p0 > 0.99 and p1 < 0.01:
+                # Strict settlement detection to avoid false positives
+                if p0 > 0.999 and p1 < 0.001:
                     is_resolved = True
                     winning_outcome_index = 0
-                elif p1 > 0.99 and p0 < 0.01:
+                elif p1 > 0.999 and p0 < 0.001:
                     is_resolved = True
                     winning_outcome_index = 1
         except (ValueError, TypeError, json.JSONDecodeError):
@@ -540,13 +545,14 @@ class PolymarketClient(BaseClient):
                 )
             )
 
-        # Mark winning outcome if resolved
+        # Determine winning outcome name if resolved
+        winning_outcome_name = None
         if (
             is_resolved
             and winning_outcome_index is not None
             and winning_outcome_index < len(outcomes)
         ):
-            data["winning_outcome"] = outcomes[winning_outcome_index].name
+            winning_outcome_name = outcomes[winning_outcome_index].name
 
         return Market(
             id=condition_id,
@@ -559,6 +565,7 @@ class PolymarketClient(BaseClient):
             resolved=resolved,
             venue_status=venue_status,
             status=status,
+            winning_outcome=winning_outcome_name,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=best_bid_size,
@@ -607,6 +614,7 @@ class PolymarketClient(BaseClient):
             resolved=False,
             venue_status=venue_status,
             status=None,  # Don't normalize for partial markets
+            winning_outcome=None,
             volume=None,
             open_interest=None,
             best_bid_size=None,

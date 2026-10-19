@@ -553,15 +553,14 @@ class KalshiClient(BaseClient):
             )
         )
 
-        # Mark winning outcome if result is provided
+        # Determine winning outcome if result is provided
+        winning_outcome_name = None
         if result and resolved:
             for outcome in outcomes:
                 # Kalshi result is "yes" or "no"
                 if result.lower() == outcome.name.lower():
-                    # Mark as winner - we can add a field to Outcome later if needed
-                    # For now, store it in raw_data
-                    if "winning_outcome" not in data:
-                        data["winning_outcome"] = outcome.name
+                    winning_outcome_name = outcome.name
+                    break
 
         return Market(
             id=ticker,
@@ -574,6 +573,7 @@ class KalshiClient(BaseClient):
             resolved=resolved,
             venue_status=venue_status,
             status=status,
+            winning_outcome=winning_outcome_name,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=best_bid_size,

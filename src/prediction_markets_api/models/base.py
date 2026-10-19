@@ -84,6 +84,10 @@ class Market(BaseModel):
         None,
         description="Normalized market status: open, closed, or resolved. None if unknown.",
     )
+    winning_outcome: str | None = Field(
+        None,
+        description="Name of the winning outcome when market is resolved (e.g., 'Yes', 'No')",
+    )
     volume: Decimal | None = Field(None, description="Total trading volume", ge=Decimal("0"))
     open_interest: Decimal | None = Field(
         None,

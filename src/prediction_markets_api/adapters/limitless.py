@@ -439,13 +439,14 @@ class LimitlessClient(BaseClient):
                 )
             )
 
-        # Mark winning outcome if result is present
+        # Determine winning outcome if result is present
+        winning_outcome_name = None
         if result is not None and resolved:
             # result could be "yes", "no", or other values
             result_str = str(result).lower()
             for outcome in outcomes:
                 if outcome.name.lower() == result_str:
-                    data["winning_outcome"] = outcome.name
+                    winning_outcome_name = outcome.name
                     break
 
         return Market(
@@ -459,6 +460,7 @@ class LimitlessClient(BaseClient):
             resolved=resolved,
             venue_status=venue_status,
             status=status,
+            winning_outcome=winning_outcome_name,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=None,

@@ -523,16 +523,56 @@ async def test_status_mapping_from_fixtures():
 
             # Check winning outcome if expected
             if expected_data.get("has_winning_outcome"):
-                assert "winning_outcome" in market.raw_data, (
+                assert market.winning_outcome is not None, (
                     f"Expected winning_outcome for {status_name}"
                 )
-                assert market.raw_data["winning_outcome"] in ["Yes", "No"], (
+                assert market.winning_outcome in ["Yes", "No"], (
                     "Winning outcome should be Yes or No"
                 )
 
             print(
                 f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}"
             )
+
+
+@pytest.mark.asyncio
+async def test_closed_market_with_near_extreme_prices_not_resolved():
+    """Test that closed markets with prices near 0/1 but not extreme enough are marked as CLOSED."""
+    async with PolymarketClient() as client:
+        # Closed market with prices near 0.99/0.01 but not quite there
+        # This simulates a market that's trading with high certainty but not yet formally resolved
+        near_extreme = {
+            "conditionId": "test-near-extreme",
+            "question": "Test Market Near Extreme (not resolved)",
+            "closed": True,
+            "outcomePrices": '["0.998", "0.002"]',  # Just below 0.999 threshold
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(near_extreme)
+        assert market.venue_status == "closed"
+        assert market.status == MarketStatus.CLOSED
+        assert market.resolved is False
+        assert market.winning_outcome is None
+
+        # Another test with 0.99/0.01 (old threshold)
+        old_threshold = {
+            "conditionId": "test-old-threshold",
+            "question": "Test Market At Old Threshold",
+            "closed": True,
+            "outcomePrices": '["0.99", "0.01"]',  # At old threshold, below new 0.999
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(old_threshold)
+        assert market.venue_status == "closed"
+        assert market.status == MarketStatus.CLOSED
+        assert market.resolved is False
+        assert market.winning_outcome is None
 
 
 @pytest.mark.asyncio
@@ -554,7 +594,7 @@ async def test_closed_vs_resolved_distinction():
         assert market.venue_status == "closed"
         assert market.status == MarketStatus.CLOSED
         assert market.resolved is False
-        assert "winning_outcome" not in market.raw_data
+        assert market.winning_outcome is None
 
         # Resolved (prices settled to 0/1)
         resolved_yes = {
@@ -571,7 +611,7 @@ async def test_closed_vs_resolved_distinction():
         assert market.venue_status == "resolved"
         assert market.status == MarketStatus.RESOLVED
         assert market.resolved is True
-        assert market.raw_data["winning_outcome"] == "Yes"
+        assert market.winning_outcome == "Yes"
 
         # Resolved (No wins)
         resolved_no = {
@@ -588,4 +628,4 @@ async def test_closed_vs_resolved_distinction():
         assert market.venue_status == "resolved"
         assert market.status == MarketStatus.RESOLVED
         assert market.resolved is True
-        assert market.raw_data["winning_outcome"] == "No"
+        assert market.winning_outcome == "No"
