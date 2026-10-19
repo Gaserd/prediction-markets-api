@@ -1,14 +1,16 @@
 """Tests for Limitless adapter using recorded API fixtures."""
 
 import json
+import re
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from prediction_markets_api.adapters.limitless import LimitlessClient
-from prediction_markets_api.models.base import Currency, OrderSide
+from prediction_markets_api.models.base import Currency, MarketStatus, OrderSide
 
 
 @pytest.fixture
@@ -264,7 +266,177 @@ async def test_place_order_validation(limitless_client):
 
 
 @pytest.mark.asyncio
+async def test_get_trades_rejects_unknown_kwargs():
+    """Test that get_trades raises TypeError for unknown keyword arguments."""
+    async with LimitlessClient() as client:
+        with pytest.raises(TypeError):
+            async for _ in client.get_trades("test-slug", unknown_param=123):
+                pass
+
+
+@pytest.mark.asyncio
 async def test_close(limitless_client):
     """Test close method."""
     await limitless_client.close()
     # Just verify it doesn't raise
+
+
+@pytest.mark.asyncio
+async def test_status_mapping_from_fixtures():
+    """Test that Limitless status fixtures map to correct normalized statuses."""
+    import json
+    from pathlib import Path
+
+    from prediction_markets_api.models.base import MarketStatus
+
+    fixtures_dir = Path("tests/fixtures/limitless/statuses")
+    meta_path = fixtures_dir / "meta.json"
+
+    assert meta_path.exists(), "Status fixtures meta.json not found"
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    async with LimitlessClient() as client:
+        for status_name, expected_data in meta["statuses"].items():
+            fixture_path = fixtures_dir / f"{status_name}.json"
+            assert fixture_path.exists(), f"Fixture {status_name}.json not found"
+
+            with open(fixture_path) as f:
+                market_data = json.load(f)
+
+            market = client._parse_market(market_data)
+
+            # Check venue_status
+            assert market.venue_status == status_name, (
+                f"Expected venue_status={status_name}, got {market.venue_status}"
+            )
+
+            # Check normalized status
+            expected_status = expected_data["expected_normalized_status"]
+            if expected_status == "open":
+                assert market.status == MarketStatus.OPEN
+            elif expected_status == "closed":
+                assert market.status == MarketStatus.CLOSED
+            elif expected_status == "resolved":
+                assert market.status == MarketStatus.RESOLVED
+
+            # Check resolved flag
+            assert market.resolved == expected_data["expected_resolved"]
+
+            print(
+                f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_unknown_status_logs_warning(caplog):
+    """Test that unknown Limitless status logs a warning."""
+    async with LimitlessClient() as client:
+        market_data = {
+            "slug": "test-unknown",
+            "title": "Test Market",
+            "status": "UNKNOWN_STATUS",
+            "expired": False,
+            "prices": [50, 50],
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        with caplog.at_level("WARNING"):
+            market = client._parse_market(market_data)
+
+        # Should have logged a warning
+        assert any(
+            "Unknown Limitless market status 'UNKNOWN_STATUS'" in record.message
+            for record in caplog.records
+        )
+
+        # Status should be None
+        assert market.status is None
+        assert market.venue_status == "UNKNOWN_STATUS"
+
+
+@pytest.mark.asyncio
+async def test_resolved_market_with_result():
+    """Test that Limitless marks winning outcome when result is present."""
+    async with LimitlessClient() as client:
+        # Market with result="yes"
+        market_data = {
+            "slug": "test-resolved-yes",
+            "title": "Test Resolved Market (Yes wins)",
+            "status": "RESOLVED",
+            "expired": False,
+            "result": "yes",
+            "prices": [100, 0],
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(market_data)
+        assert market.venue_status == "RESOLVED"
+        assert market.status == MarketStatus.RESOLVED
+        assert market.resolved is True
+        assert market.winning_outcome == "Yes"
+
+        # Market with result="no"
+        market_data["result"] = "no"
+        market_data["prices"] = [0, 100]
+
+        market = client._parse_market(market_data)
+        assert market.resolved is True
+        assert market.winning_outcome == "No"
+
+
+@pytest.mark.asyncio
+async def test_closed_true_raises_not_implemented():
+    """Test that closed=True raises NotImplementedError.
+
+    Limitless API only provides /markets/active endpoint.
+    Returning active markets when closed=True was silently wrong.
+    """
+    async with LimitlessClient() as client:
+        with pytest.raises(NotImplementedError, match="does not provide an endpoint"):
+            async for _ in client.list_markets(closed=True, limit=1):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_get_price_not_found(respx_mock):
+    """Test get_price with 404 error."""
+    from prediction_markets_api.exceptions import NotFoundError
+
+    respx_mock.get(re.compile(r".*/markets/.*/orderbook")).mock(
+        return_value=httpx.Response(404, json={"error": "Not found"})
+    )
+
+    async with LimitlessClient() as client:
+        with pytest.raises(NotFoundError, match="not found"):
+            await client.get_price("nonexistent-market", OrderSide.BUY)
+
+
+@pytest.mark.asyncio
+async def test_list_markets_500_error(respx_mock):
+    """Test list_markets with 500 error."""
+    from prediction_markets_api.exceptions import VenueAPIError
+
+    respx_mock.get(re.compile(r".*/markets/active.*")).mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+
+    async with LimitlessClient() as client:
+        with pytest.raises(VenueAPIError, match="Failed to fetch markets"):
+            async for _ in client.list_markets(limit=1):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_error(respx_mock):
+    """Test 429 rate limit error."""
+    from prediction_markets_api.exceptions import RateLimitError
+
+    respx_mock.get(re.compile(r".*/markets/.*")).mock(
+        return_value=httpx.Response(429, text="Rate limit exceeded")
+    )
+
+    async with LimitlessClient() as client:
+        with pytest.raises(RateLimitError, match="Rate limit"):
+            await client.get_market("some-market")

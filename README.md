@@ -61,46 +61,215 @@ asyncio.run(main())
 ### Getting Prices
 
 ```python
+import asyncio
 from prediction_markets_api import PolymarketClient
 from prediction_markets_api.models.base import OrderSide
 
-async with PolymarketClient() as client:
-    # Get best executable prices
-    buy_price = await client.get_price(outcome_id="token_id", side=OrderSide.BUY)
-    sell_price = await client.get_price(outcome_id="token_id", side=OrderSide.SELL)
-    
-    print(f"Best ask (to buy): {buy_price.price:.4f}")
-    print(f"Best bid (to sell): {sell_price.price:.4f}")
-```
 
-### Placing Orders (Dry-Run by Default)
+async def main():
+    async with PolymarketClient() as client:
+        # Get first market with outcomes
+        async for market in client.list_markets(closed=False, limit=10):
+            if market.outcomes:
+                outcome = market.outcomes[0]
+                break
 
-```python
-from decimal import Decimal
-from prediction_markets_api import PolymarketClient
-from prediction_markets_api.models.base import OrderSide
+        # Get best executable prices
+        buy_price = await client.get_price(outcome_id=outcome.id, side=OrderSide.BUY)
+        sell_price = await client.get_price(outcome_id=outcome.id, side=OrderSide.SELL)
 
-async with PolymarketClient(max_order_size=Decimal("1000")) as client:
-    # Dry-run mode (default): validates but doesn't send
-    result = await client.place_order(
-        outcome_id="token_id",
-        side=OrderSide.BUY,
-        size=Decimal("100"),
-        price=Decimal("0.65"),
-        dry_run=True,  # Default: safe simulation
-    )
-    print(result)  # {'dry_run': True, 'status': 'simulated', ...}
-    
-    # Real orders require explicit opt-in + API keys
-    # result = await client.place_order(..., dry_run=False)
+        print(f"Best ask (to buy): {buy_price.price:.4f}")
+        print(f"Best bid (to sell): {sell_price.price:.4f}")
+
+
+asyncio.run(main())
 ```
 
 ### Getting Historical Trades
 
 ```python
-async with PolymarketClient() as client:
-    async for trade in client.get_trades(outcome_id="token_id", limit=10):
-        print(f"{trade.timestamp}: {trade.side.value} {trade.size} @ {trade.price}")
+import asyncio
+from prediction_markets_api import PolymarketClient
+
+
+async def main():
+    async with PolymarketClient() as client:
+        # Get first market with outcomes
+        async for market in client.list_markets(closed=False, limit=10):
+            if market.outcomes:
+                outcome = market.outcomes[0]
+                break
+
+        # Get historical trades
+        async for trade in client.get_trades(outcome_id=outcome.id, limit=10):
+            print(f"{trade.timestamp}: {trade.side.value} {trade.size} @ {trade.price}")
+
+
+asyncio.run(main())
+```
+
+## How It Works
+
+### Data Model Contract
+
+All venues return data through a unified model with strict guarantees:
+
+**Price Normalization:**
+- Prices are normalized to 0..1 probability space (e.g., 0.65 = 65% probability)
+- Original venue prices preserved in `raw_price` field for reference
+- `OrderSide.BUY` means buying the outcome (get_price returns best ask)
+- `OrderSide.SELL` means selling the outcome (get_price returns best bid)
+
+**Timestamps:**
+- All timestamps are timezone-aware UTC (never naive datetimes)
+- Created dates, end dates, and trade timestamps use `datetime` with `tzinfo=timezone.utc`
+
+**Currency:**
+- All amounts include explicit currency (`Currency.USD`, `Currency.USDC`)
+- No ambiguous currency-free numbers
+
+**Partial Responses:**
+- Markets with incomplete data are flagged with `partial=True`
+- Only raise errors for invalid data, not incomplete data
+- Allows graceful degradation when APIs return partial information
+
+**Order Book Semantics:**
+- Bids sorted descending (best bid = highest price first)
+- Asks sorted ascending (best ask = lowest price first)
+- Books validated to never be crossed (best_bid < best_ask)
+- Sizes: `best_bid_size`, `best_ask_size`, `open_interest`, `liquidity`
+
+**Market Status:**
+- Each market includes `venue_status` (raw venue string) and `status` (normalized enum)
+- Normalized statuses: `MarketStatus.OPEN`, `MarketStatus.CLOSED`, `MarketStatus.RESOLVED`
+- `resolved=True` means the outcome is known (may still be settling)
+- `winning_outcome: str | None` contains the name of the winning outcome when resolved (e.g., "Yes", "No")
+- Unknown venue statuses log a warning and return `status=None` (not silently mapped)
+
+**Status Mapping Table:**
+
+| Venue | Raw Status | Normalized Status | Resolved | Notes |
+|-------|------------|------------------|----------|-------|
+| **Kalshi** | `active` | `OPEN` | False | Market is open for trading (filter: `open`) |
+| | `initialized` | `CLOSED` | False | Not yet opened, excluded by `closed=None` (filter: `unopened`) |
+| | `determined` | `RESOLVED` | True | Outcome known, settling (filter: `closed`) |
+| | `finalized` | `RESOLVED` | True | Fully settled and paid out (filter: `settled`) |
+| **Polymarket** | `open` | `OPEN` | False | Market is open for trading (`closed=false`) |
+| | `closed` | `CLOSED` | False | Market closed but outcome not yet determined |
+| | `resolved` | `RESOLVED` | True | Market resolved, outcome prices settled to 0/1 |
+| **Limitless** | `FUNDED` | `OPEN` | False | Market is active and funded |
+
+**Notes:**
+- Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
+- Kalshi resolved markets with `result='scalar'` (e.g., cancelled events): These are marked as `resolved=True` with `status=RESOLVED` but `winning_outcome=None` since no yes/no outcome won. This is acceptable and documented.
+- Polymarket resolution detection:
+  - No explicit resolution status fields in API response (umaResolutionStatuses always empty, resolvedBy/resolutionSource not status indicators)
+  - Resolution determined by strict price settlement check: >0.999 and <0.001 thresholds
+  - This minimizes false positives from markets trading near certainty but not yet formally resolved
+  - Winning outcome automatically detected from settled prices
+- Limitless only exposes `FUNDED` markets via `/markets/active` endpoint. Calling `list_markets(closed=True)` raises `NotImplementedError` with a clear explanation, since the API does not provide an endpoint for closed/resolved markets.
+
+### Adapter Architecture
+
+Each venue implements the `BaseClient` interface:
+
+```python
+import asyncio
+from prediction_markets_api import PolymarketClient, KalshiClient
+
+
+async def main():
+    # All clients provide the same methods:
+    async with PolymarketClient() as client:
+        async for market in client.list_markets(limit=10):  # Standard method
+            print(market.question)
+
+
+asyncio.run(main())
+```
+
+**Unified Methods (Read-Only for 0.9):**
+- `list_markets(closed, limit, page_size, *, venue_params)` - List markets with pagination
+- `iter_markets(closed)` - Iterate all markets (no limit)
+- `get_market(market_id)` - Get single market by ID
+- `get_order_book(outcome_id)` - Get sorted, validated order book
+- `get_price(outcome_id, side)` - Get best executable price
+- `get_trades(outcome_id, limit, page_size)` - Historical trades iterator (up to `limit` total, default 100)
+- `iter_trades(outcome_id)` - Iterate all historical trades (unbounded)
+
+> **Note:** Trading functionality with `place_order()` is planned for version 1.0. Version 0.9 is read-only.
+
+**Venue-Specific Parameters:**
+- Venue-specific filters are keyword-only arguments (no `**kwargs`)
+- Example: `client.list_markets(category="politics")` for Kalshi
+- Prevents accidental parameter mismatches between venues
+
+### API Keys and Configuration
+
+**Version 0.9 (Read-Only):** No authentication required. All market data, prices, order books, and trades are accessible without API keys.
+
+**Trading (Planned for 1.0):** Will require API keys via environment variables.
+
+### Geographic Restrictions
+
+Be aware of venue restrictions:
+- **Polymarket**: US users blocked
+- **Kalshi**: US only (CFTC regulated)
+- **Limitless**: No restrictions (planned)
+
+### Exception Hierarchy
+
+The library provides a consistent exception hierarchy:
+
+```python
+from prediction_markets_api import (
+    PredictionMarketsError,  # Base exception
+    NotFoundError,  # Market/outcome/token not found
+    NoLiquidityError,  # Empty order book for existing market
+    VenueAPIError,  # HTTP errors, invalid responses
+    RateLimitError,  # HTTP 429 rate limit
+)
+```
+
+**Exception Types:**
+
+- **`PredictionMarketsError`**: Base exception for all library errors
+- **`NotFoundError`**: Resource not found (markets, outcomes, tokens)
+  - Attributes: `resource_type`, `resource_id`
+  - Raised on HTTP 404 or empty results
+- **`NoLiquidityError`**: No liquidity available (empty order book for an existing market)
+  - Attributes: `market_id`, `side` (BUY/SELL)
+  - Raised by `get_price()` when the order book has no bids/asks on the requested side
+  - Different from `NotFoundError` (market doesn't exist) vs. market exists but has no liquidity
+- **`VenueAPIError`**: HTTP errors, timeouts, invalid JSON responses
+  - Attributes: `status_code`, `venue`, `url`
+  - Wraps all `httpx` errors for consistent handling
+- **`RateLimitError`**: Rate limit exceeded (HTTP 429)
+  - Subclass of `VenueAPIError`
+  - Attributes: `retry_after` (seconds, from Retry-After header if available)
+
+**User Input Errors:**
+- `ValueError`: Invalid parameters (e.g., price not in 0..1, negative size)
+- `NotImplementedError`: Unsupported operations (e.g., `LimitlessClient.list_markets(closed=True)`)
+
+**Example:**
+
+```python
+import asyncio
+from prediction_markets_api import PolymarketClient, NotFoundError, VenueAPIError
+
+
+async def main():
+    async with PolymarketClient() as client:
+        try:
+            market = await client.get_market("nonexistent")
+        except NotFoundError as e:
+            print(f"Market not found: {e.resource_id}")
+        except VenueAPIError as e:
+            print(f"API error: {e.status_code} from {e.venue}")
+
+
+asyncio.run(main())
 ```
 
 ## Data Model
@@ -131,13 +300,18 @@ All venues return data through a unified model:
 ### Example: Market Object
 
 ```python
-Market(
-    id="0x1234...",
+from datetime import datetime, timezone
+from decimal import Decimal
+from prediction_markets_api.models.base import Market, Outcome, Currency
+
+market_id = "0x1234..."
+market = Market(
+    id=market_id,
     venue="polymarket",
     question="Will Bitcoin reach $100k by Dec 31?",
     outcomes=[
-        Outcome(id="token_yes", name="Yes", price=Decimal("0.65")),
-        Outcome(id="token_no", name="No", price=Decimal("0.35")),
+        Outcome(id="token_yes", market_id=market_id, name="Yes", price=Decimal("0.65")),
+        Outcome(id="token_no", market_id=market_id, name="No", price=Decimal("0.35")),
     ],
     created_at=datetime(2026, 1, 15, tzinfo=timezone.utc),
     end_date=datetime(2026, 12, 31, tzinfo=timezone.utc),
@@ -145,7 +319,39 @@ Market(
     currency=Currency.USDC,
     partial=False,
 )
+print(market.question)
 ```
+
+## Examples
+
+The `examples/` directory contains runnable examples:
+
+### Compare Same Event Across Venues
+
+```bash
+python examples/compare_venues.py
+```
+
+Search for the same event (e.g., Bitcoin predictions) across Polymarket and Kalshi, comparing prices and volumes.
+
+### Price History Analysis
+
+```bash
+python examples/price_history.py
+```
+
+Fetch historical trades for an outcome and calculate price statistics, movements, and spreads.
+
+### Export to Pandas
+
+```bash
+pip install prediction-markets-api[pandas]
+python examples/export_to_pandas.py
+```
+
+Export market data and trades to pandas DataFrames for statistical analysis, visualization, or CSV export.
+
+See [examples/README.md](examples/README.md) for details.
 
 ## Trading Configuration
 
@@ -203,7 +409,6 @@ Trading and builder-code attribution are not part of 0.9 (read-only). How builde
 | World | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://world.org) |
 | BetDEX | Solana | 🚧 Planned | — | — | No | Yes | None | [Link](https://betdex.com) |
 
-> **Trading Interface**: This release includes a designed trading interface with `place_order()`, but actual order execution is a stub. Full trading support coming in the next release.
 
 ## Development
 

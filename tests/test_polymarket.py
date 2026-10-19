@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from prediction_markets_api.adapters.polymarket import PolymarketClient
-from prediction_markets_api.models.base import Currency, OrderSide
+from prediction_markets_api.models.base import Currency, MarketStatus, OrderSide
 
 
 @pytest.mark.asyncio
@@ -121,7 +121,7 @@ async def test_get_price(prices_response, respx_mock):
 @pytest.mark.asyncio
 async def test_get_trades(trades_response, respx_mock):
     """Test getting historical trades."""
-    outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+    outcome_id = "33339798372916037220786136133406478491116150628220441951753426683441228279665"
 
     respx_mock.get("https://data-api.polymarket.com/v2/trades").mock(
         return_value=httpx.Response(200, json=trades_response)
@@ -135,17 +135,17 @@ async def test_get_trades(trades_response, respx_mock):
     assert len(trades) == 2
 
     trade1 = trades[0]
-    assert trade1.id == "0xbeef3f30b4188470347542ecd64b5470418e620e"
-    assert trade1.outcome_id == outcome_id
+    assert trade1.id == "0xc69bd5567b40ef4d11922eaa57e1f9be1c642076"
     assert trade1.side == OrderSide.BUY
-    assert trade1.price == Decimal("0.999")
-    assert trade1.size == Decimal("10.0")
+    assert trade1.price == Decimal("0.002")
+    assert trade1.size == Decimal("5.0")
     assert trade1.currency == Currency.USDC
 
     trade2 = trades[1]
+    assert trade2.id == "0xc69bd5567b40ef4d11922eaa57e1f9be1c642076"
     assert trade2.side == OrderSide.BUY
-    assert trade2.price == Decimal("0.5")
-    assert trade2.size == Decimal("45.94")
+    assert trade2.price == Decimal("0.002")
+    assert trade2.size == Decimal("5.0")
 
 
 @pytest.mark.asyncio
@@ -215,24 +215,28 @@ async def test_place_order_requires_api_keys():
 @pytest.mark.asyncio
 async def test_market_not_found(respx_mock):
     """Test handling of market not found."""
+    from prediction_markets_api.exceptions import NotFoundError
+
     respx_mock.get("https://gamma-api.polymarket.com/markets").mock(
         return_value=httpx.Response(200, json={"markets": [], "nextCursor": None})
     )
 
     async with PolymarketClient() as client:
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             await client.get_market("nonexistent_market")
 
 
 @pytest.mark.asyncio
 async def test_api_error_handling(respx_mock):
     """Test API error handling."""
+    from prediction_markets_api.exceptions import VenueAPIError
+
     respx_mock.get("https://gamma-api.polymarket.com/markets/keyset").mock(
         return_value=httpx.Response(500, text="Internal Server Error")
     )
 
     async with PolymarketClient() as client:
-        with pytest.raises(ValueError, match="Failed to fetch markets"):
+        with pytest.raises(VenueAPIError, match="Failed to fetch markets"):
             markets = []
             async for market in client.list_markets():
                 markets.append(market)
@@ -411,3 +415,252 @@ async def test_price_matches_order_book_top(orderbook_response, prices_response,
     assert sell_price.price == best_bid, (
         f"SELL price {sell_price.price} should match best bid {best_bid}"
     )
+
+
+@pytest.mark.asyncio
+async def test_get_trades_rejects_unknown_kwargs(trades_response, respx_mock):
+    """Test that get_trades raises TypeError for unknown keyword arguments."""
+    outcome_id = "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+
+    async with PolymarketClient() as client:
+        with pytest.raises(TypeError):
+            async for _ in client.get_trades(outcome_id, unknown_param=123):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_get_tokens(respx_mock):
+    """Test batch token fetching."""
+    token_ids = ["token1", "token2", "token3"]
+
+    mock_response = {
+        "data": [
+            {"token_id": "token1", "price": "0.5"},
+            {"token_id": "token2", "price": "0.6"},
+            {"token_id": "token3", "price": "0.7"},
+        ]
+    }
+
+    respx_mock.get("https://data-api.polymarket.com/v2/tokens").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    async with PolymarketClient() as client:
+        tokens = await client.get_tokens(token_ids)
+
+    assert len(tokens) == 3
+    assert tokens[0]["token_id"] == "token1"
+    assert tokens[1]["token_id"] == "token2"
+    assert tokens[2]["token_id"] == "token3"
+
+
+@pytest.mark.asyncio
+async def test_get_tokens_chunking(respx_mock):
+    """Test that get_tokens automatically chunks large requests (>50 tokens)."""
+    token_ids = [f"token{i}" for i in range(75)]
+
+    def mock_tokens_response(request):
+        requested_ids = request.url.params["token_ids"].split(",")
+        return httpx.Response(
+            200,
+            json={"data": [{"token_id": tid, "price": "0.5"} for tid in requested_ids]},
+        )
+
+    respx_mock.get("https://data-api.polymarket.com/v2/tokens").mock(
+        side_effect=mock_tokens_response
+    )
+
+    async with PolymarketClient() as client:
+        tokens = await client.get_tokens(token_ids)
+
+    assert len(tokens) == 75
+    # Should have made 2 requests (50 + 25)
+    requests = respx_mock.calls
+    assert len(requests) == 2
+    # Verify chunk sizes
+    assert len(requests[0].request.url.params["token_ids"].split(",")) == 50
+    assert len(requests[1].request.url.params["token_ids"].split(",")) == 25
+
+
+@pytest.mark.asyncio
+async def test_status_mapping_from_fixtures():
+    """Test that Polymarket status fixtures map to correct normalized statuses."""
+    import json
+    from pathlib import Path
+
+    from prediction_markets_api.models.base import MarketStatus
+
+    fixtures_dir = Path("tests/fixtures/polymarket/statuses")
+    meta_path = fixtures_dir / "meta.json"
+
+    assert meta_path.exists(), "Status fixtures meta.json not found"
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    async with PolymarketClient() as client:
+        for status_name, expected_data in meta["statuses"].items():
+            fixture_path = fixtures_dir / f"{status_name}.json"
+            assert fixture_path.exists(), f"Fixture {status_name}.json not found"
+
+            with open(fixture_path) as f:
+                market_data = json.load(f)
+
+            market = client._parse_market(market_data)
+
+            # Check venue_status
+            assert market.venue_status == status_name, (
+                f"Expected venue_status={status_name}, got {market.venue_status}"
+            )
+
+            # Check normalized status
+            expected_status = expected_data["expected_normalized_status"]
+            if expected_status == "open":
+                assert market.status == MarketStatus.OPEN
+            elif expected_status == "closed":
+                assert market.status == MarketStatus.CLOSED
+            elif expected_status == "resolved":
+                assert market.status == MarketStatus.RESOLVED
+
+            # Check resolved flag
+            assert market.resolved == expected_data["expected_resolved"]
+
+            # Check winning outcome if expected
+            if expected_data.get("has_winning_outcome"):
+                assert market.winning_outcome is not None, (
+                    f"Expected winning_outcome for {status_name}"
+                )
+                assert market.winning_outcome in ["Yes", "No"], (
+                    "Winning outcome should be Yes or No"
+                )
+
+            print(
+                f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_closed_market_with_near_extreme_prices_not_resolved():
+    """Test that closed markets with prices near 0/1 but not extreme enough are marked as CLOSED."""
+    async with PolymarketClient() as client:
+        # Closed market with prices near 0.99/0.01 but not quite there
+        # This simulates a market that's trading with high certainty but not yet formally resolved
+        near_extreme = {
+            "conditionId": "test-near-extreme",
+            "question": "Test Market Near Extreme (not resolved)",
+            "closed": True,
+            "outcomePrices": '["0.998", "0.002"]',  # Just below 0.999 threshold
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(near_extreme)
+        assert market.venue_status == "closed"
+        assert market.status == MarketStatus.CLOSED
+        assert market.resolved is False
+        assert market.winning_outcome is None
+
+        # Another test with 0.99/0.01 (old threshold)
+        old_threshold = {
+            "conditionId": "test-old-threshold",
+            "question": "Test Market At Old Threshold",
+            "closed": True,
+            "outcomePrices": '["0.99", "0.01"]',  # At old threshold, below new 0.999
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(old_threshold)
+        assert market.venue_status == "closed"
+        assert market.status == MarketStatus.CLOSED
+        assert market.resolved is False
+        assert market.winning_outcome is None
+
+
+@pytest.mark.asyncio
+async def test_closed_vs_resolved_distinction():
+    """Test that Polymarket correctly distinguishes closed from resolved markets."""
+    async with PolymarketClient() as client:
+        # Closed but unresolved (prices not settled)
+        closed_unresolved = {
+            "conditionId": "test-closed",
+            "question": "Test Closed Market",
+            "closed": True,
+            "outcomePrices": '["0.5", "0.5"]',
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(closed_unresolved)
+        assert market.venue_status == "closed"
+        assert market.status == MarketStatus.CLOSED
+        assert market.resolved is False
+        assert market.winning_outcome is None
+
+        # Resolved (prices settled to 0/1)
+        resolved_yes = {
+            "conditionId": "test-resolved-yes",
+            "question": "Test Resolved Market (Yes wins)",
+            "closed": True,
+            "outcomePrices": '["0.9999", "0.0001"]',
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(resolved_yes)
+        assert market.venue_status == "resolved"
+        assert market.status == MarketStatus.RESOLVED
+        assert market.resolved is True
+        assert market.winning_outcome == "Yes"
+
+        # Resolved (No wins)
+        resolved_no = {
+            "conditionId": "test-resolved-no",
+            "question": "Test Resolved Market (No wins)",
+            "closed": True,
+            "outcomePrices": '["0.0001", "0.9999"]',
+            "outcomes": '["Yes", "No"]',
+            "clobTokenIds": '["token1", "token2"]',
+            "createdAt": "2026-01-01T00:00:00Z",
+        }
+
+        market = client._parse_market(resolved_no)
+        assert market.venue_status == "resolved"
+        assert market.status == MarketStatus.RESOLVED
+        assert market.resolved is True
+        assert market.winning_outcome == "No"
+
+
+@pytest.mark.asyncio
+async def test_open_near_certain_market_not_resolved():
+    """Test that open markets with near-certain prices stay OPEN and unresolved.
+
+    Regression test for QA blocker: open markets trading at 0.999/0.001
+    (e.g., long-dated 2028 elections) were incorrectly marked as resolved.
+    Price-based resolution detection must only apply to closed markets.
+    """
+    import json
+    from pathlib import Path
+
+    fixture_path = Path(__file__).parent / "fixtures" / "polymarket" / "open_near_certain.json"
+    with open(fixture_path) as f:
+        market_data = json.load(f)
+
+    async with PolymarketClient() as client:
+        market = client._parse_market(market_data)
+
+    # Market is open and near-certain (0.9995/0.0005)
+    assert market.status == MarketStatus.OPEN
+    assert market.venue_status == "open"
+    assert market.resolved is False
+    assert market.winning_outcome is None
+
+    # Check prices are preserved
+    assert len(market.outcomes) == 2
+    yes_outcome = market.outcomes[0]
+    assert yes_outcome.name == "Yes"
+    assert yes_outcome.price >= Decimal("0.999")

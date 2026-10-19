@@ -1,0 +1,12 @@
+{
+  "description": "Limitless market status fixtures recorded from live API",
+  "recorded_at": "2026-10-11",
+  "note": "Limitless /markets/active endpoint only returns FUNDED markets",
+  "statuses": {
+    "FUNDED": {
+      "description": "Active and funded market",
+      "expected_normalized_status": "open",
+      "expected_resolved": false
+    }
+  }
+}

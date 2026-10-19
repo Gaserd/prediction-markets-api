@@ -1,0 +1,15 @@
+{
+  "id": "0x3265b10daeb30dbcc3214bd02e488551d0a5d3028392f4152e4750b943fbfc91",
+  "question": "Will Trump win the 2028 US Presidential Election?",
+  "conditionId": "0x3265b10daeb30dbcc3214bd02e488551d0a5d3028392f4152e4750b943fbfc91",
+  "slug": "will-trump-win-2028",
+  "description": "Long-dated market with near-certain outcome trading at 0.9995",
+  "outcomes": ["Yes", "No"],
+  "outcomePrices": ["0.9995", "0.0005"],
+  "clobTokenIds": ["123456", "789012"],
+  "closed": false,
+  "startDate": "2026-01-01T00:00:00Z",
+  "endDate": "2028-11-08T00:00:00Z",
+  "volumeNum": 1000000.5,
+  "liquidityNum": 50000.75
+}
