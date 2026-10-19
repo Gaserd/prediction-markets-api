@@ -1,6 +1,7 @@
 """Tests for Kalshi adapter."""
 
 import json
+import re
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -666,3 +667,46 @@ async def test_closed_none_applies_limit_after_filtering(respx_mock):
     # Should get exactly 3 markets (all active, initialized filtered out before limit)
     assert len(markets) == 3
     assert all(m.venue_status == "active" for m in markets)
+
+
+@pytest.mark.asyncio
+async def test_get_price_not_found(respx_mock):
+    """Test get_price with 404 error."""
+    from prediction_markets_api.exceptions import NotFoundError
+
+    respx_mock.get(re.compile(r".*/markets/.*/orderbook")).mock(
+        return_value=httpx.Response(404, json={"error": "Not found"})
+    )
+
+    async with KalshiClient() as client:
+        with pytest.raises(NotFoundError, match="not found"):
+            await client.get_price("NONEXISTENT", OrderSide.BUY)
+
+
+@pytest.mark.asyncio
+async def test_list_markets_500_error(respx_mock):
+    """Test list_markets with 500 error."""
+    from prediction_markets_api.exceptions import VenueAPIError
+
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+
+    async with KalshiClient() as client:
+        with pytest.raises(VenueAPIError, match="Failed to fetch markets"):
+            async for _ in client.list_markets(limit=1):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_error(respx_mock):
+    """Test 429 rate limit error."""
+    from prediction_markets_api.exceptions import RateLimitError
+
+    respx_mock.get(re.compile(r".*/markets/.*")).mock(
+        return_value=httpx.Response(429, text="Rate limit exceeded")
+    )
+
+    async with KalshiClient() as client:
+        with pytest.raises(RateLimitError, match="Rate limit"):
+            await client.get_market("SOME-MARKET")

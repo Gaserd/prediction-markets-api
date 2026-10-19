@@ -1,10 +1,12 @@
 """Tests for Limitless adapter using recorded API fixtures."""
 
 import json
+import re
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from prediction_markets_api.adapters.limitless import LimitlessClient
@@ -395,3 +397,46 @@ async def test_closed_true_raises_not_implemented():
         with pytest.raises(NotImplementedError, match="does not provide an endpoint"):
             async for _ in client.list_markets(closed=True, limit=1):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_get_price_not_found(respx_mock):
+    """Test get_price with 404 error."""
+    from prediction_markets_api.exceptions import NotFoundError
+
+    respx_mock.get(re.compile(r".*/markets/.*/orderbook")).mock(
+        return_value=httpx.Response(404, json={"error": "Not found"})
+    )
+
+    async with LimitlessClient() as client:
+        with pytest.raises(NotFoundError, match="not found"):
+            await client.get_price("nonexistent-market", OrderSide.BUY)
+
+
+@pytest.mark.asyncio
+async def test_list_markets_500_error(respx_mock):
+    """Test list_markets with 500 error."""
+    from prediction_markets_api.exceptions import VenueAPIError
+
+    respx_mock.get(re.compile(r".*/markets/active.*")).mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+
+    async with LimitlessClient() as client:
+        with pytest.raises(VenueAPIError, match="Failed to fetch markets"):
+            async for _ in client.list_markets(limit=1):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_error(respx_mock):
+    """Test 429 rate limit error."""
+    from prediction_markets_api.exceptions import RateLimitError
+
+    respx_mock.get(re.compile(r".*/markets/.*")).mock(
+        return_value=httpx.Response(429, text="Rate limit exceeded")
+    )
+
+    async with LimitlessClient() as client:
+        with pytest.raises(RateLimitError, match="Rate limit"):
+            await client.get_market("some-market")

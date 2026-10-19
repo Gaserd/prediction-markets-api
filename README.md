@@ -85,40 +85,6 @@ async def main():
 asyncio.run(main())
 ```
 
-### Placing Orders (Dry-Run by Default)
-
-```python
-import asyncio
-from decimal import Decimal
-from prediction_markets_api import PolymarketClient
-from prediction_markets_api.models.base import OrderSide
-
-
-async def main():
-    async with PolymarketClient(max_order_size=Decimal("1000")) as client:
-        # Get first market with outcomes
-        async for market in client.list_markets(closed=False, limit=10):
-            if market.outcomes:
-                outcome = market.outcomes[0]
-                break
-
-        # Dry-run mode (default): validates but doesn't send
-        result = await client.place_order(
-            outcome_id=outcome.id,
-            side=OrderSide.BUY,
-            size=Decimal("100"),
-            price=Decimal("0.65"),
-            dry_run=True,  # Default: safe simulation
-        )
-        print(result)  # {'dry_run': True, 'status': 'simulated', ...}
-
-        # Real orders require explicit opt-in + API keys
-        # result = await client.place_order(..., dry_run=False)
-
-
-asyncio.run(main())
-```
-
 ### Getting Historical Trades
 
 ```python
@@ -222,14 +188,15 @@ async def main():
 asyncio.run(main())
 ```
 
-**Unified Methods:**
+**Unified Methods (Read-Only for 0.9):**
 - `list_markets(closed, limit, page_size, *, venue_params)` - List markets with pagination
 - `iter_markets(closed)` - Iterate all markets (no limit)
 - `get_market(market_id)` - Get single market by ID
 - `get_order_book(outcome_id)` - Get sorted, validated order book
 - `get_price(outcome_id, side)` - Get best executable price
 - `get_trades(outcome_id, limit)` - Historical trades iterator
-- `place_order(...)` - Place order (dry_run=True by default)
+
+> **Note:** Trading functionality with `place_order()` is planned for version 1.0. Version 0.9 is read-only.
 
 **Venue-Specific Parameters:**
 - Venue-specific filters are keyword-only arguments (no `**kwargs`)
@@ -238,54 +205,9 @@ asyncio.run(main())
 
 ### API Keys and Configuration
 
-**Read Operations:** No authentication required for market data, prices, and order books.
+**Version 0.9 (Read-Only):** No authentication required. All market data, prices, order books, and trades are accessible without API keys.
 
-**Trading Operations:** Require API keys via environment variables:
-
-```bash
-# Polymarket
-export POLYMARKET_API_KEY="your_key"
-export POLYMARKET_API_SECRET="your_secret"
-export POLYMARKET_WALLET_ADDRESS="0x..."
-
-# Kalshi
-export KALSHI_API_KEY="your_key"
-export KALSHI_API_SECRET="your_secret"
-```
-
-**Never hardcode API keys in source code.**
-
-### Dry-Run Safety
-
-Trading has safe defaults:
-
-```python
-import asyncio
-from decimal import Decimal
-from prediction_markets_api import PolymarketClient
-from prediction_markets_api.models.base import OrderSide
-
-
-async def main():
-    async with PolymarketClient() as client:
-        # Get first market with outcomes
-        async for market in client.list_markets(closed=False, limit=10):
-            if market.outcomes:
-                outcome_id = market.outcomes[0].id
-                break
-
-        # Default: dry_run=True (safe simulation)
-        result = await client.place_order(
-            outcome_id, OrderSide.BUY, Decimal("100"), Decimal("0.65")
-        )
-        print(result)  # {'dry_run': True, 'status': 'simulated', ...}
-
-        # Real orders require explicit opt-in
-        # result = await client.place_order(..., dry_run=False)
-
-
-asyncio.run(main())
-```
+**Trading (Planned for 1.0):** Will require API keys via environment variables.
 
 ### Geographic Restrictions
 
@@ -465,7 +387,6 @@ export POLYMARKET_WALLET_ADDRESS="0x..."
 | World | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://world.org) |
 | BetDEX | Solana | 🚧 Planned | — | — | No | Yes | None | [Link](https://betdex.com) |
 
-> **Trading Interface**: This release includes a designed trading interface with `place_order()`, but actual order execution is a stub. Full trading support coming in the next release.
 
 ## Development
 

@@ -17,6 +17,7 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.exceptions import NotFoundError, RateLimitError, VenueAPIError
 from prediction_markets_api.models.base import (
     Currency,
     Market,
@@ -146,8 +147,32 @@ class KalshiClient(BaseClient):
                     response = await self._http_client.get(url, params=params)
                     response.raise_for_status()
                     data = response.json()
-                except (httpx.HTTPError, ValueError) as e:
-                    raise ValueError(f"Failed to fetch markets: {e}") from e
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 429:
+                        raise RateLimitError(
+                            "Rate limit exceeded",
+                            venue="kalshi",
+                            url=str(e.request.url),
+                        ) from e
+                    else:
+                        raise VenueAPIError(
+                            f"Failed to fetch markets: {e}",
+                            status_code=e.response.status_code,
+                            venue="kalshi",
+                            url=str(e.request.url),
+                        ) from e
+                except httpx.HTTPError as e:
+                    raise VenueAPIError(
+                        f"HTTP error fetching markets: {e}",
+                        venue="kalshi",
+                        url=url,
+                    ) from e
+                except ValueError as e:
+                    raise VenueAPIError(
+                        f"Invalid JSON response: {e}",
+                        venue="kalshi",
+                        url=url,
+                    ) from e
 
                 markets = data.get("markets", [])
                 if not markets:
@@ -206,12 +231,46 @@ class KalshiClient(BaseClient):
             response = await self._http_client.get(url)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch market {market_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Market not found: {market_id}",
+                    resource_type="market",
+                    resource_id=market_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch market {market_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching market {market_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for market {market_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
 
         market_data = data.get("market")
         if not market_data:
-            raise ValueError(f"Market {market_id} not found")
+            raise NotFoundError(
+                f"Market not found: {market_id}",
+                resource_type="market",
+                resource_id=market_id,
+            )
 
         return self._parse_market(market_data)
 
@@ -237,8 +296,38 @@ class KalshiClient(BaseClient):
             response = await self._http_client.get(url)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch order book for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Order book not found for market: {outcome_id}",
+                    resource_type="market",
+                    resource_id=outcome_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch order book for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching order book for {outcome_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for order book {outcome_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
 
         order_book = self._parse_order_book(outcome_id, data)
         order_book.validate_not_crossed()
@@ -332,8 +421,32 @@ class KalshiClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch trades for {outcome_id}: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
 
             trades = data.get("trades", [])
             if not trades:
