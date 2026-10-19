@@ -10,9 +10,16 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.exceptions import (
+    NoLiquidityError,
+    NotFoundError,
+    RateLimitError,
+    VenueAPIError,
+)
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -20,6 +27,7 @@ from prediction_markets_api.models.base import (
     Price,
     Trade,
 )
+from prediction_markets_api.utils import parse_timestamp
 
 
 class PolymarketClient(BaseClient):
@@ -98,8 +106,32 @@ class PolymarketClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch markets: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch markets: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching markets: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
 
             markets = data.get("markets", [])
             if not markets:
@@ -149,12 +181,51 @@ class PolymarketClient(BaseClient):
             response = await self._http_client.get(url, params=params)  # type: ignore[arg-type]
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch market {market_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Market not found: {market_id}",
+                    resource_type="market",
+                    resource_id=market_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch market {market_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching market {market_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for market {market_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
 
-        markets = data.get("markets", [])
+        # Handle both formats: {"markets": [...]} or [...]
+        if isinstance(data, list):
+            markets = data
+        else:
+            markets = data.get("markets", [])
+
         if not markets:
-            raise ValueError(f"Market {market_id} not found")
+            raise NotFoundError(
+                f"Market not found: {market_id}",
+                resource_type="market",
+                resource_id=market_id,
+            )
 
         return self._parse_market(markets[0])
 
@@ -177,13 +248,105 @@ class PolymarketClient(BaseClient):
             response = await self._http_client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch order book for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Order book not found for outcome: {outcome_id}",
+                    resource_type="outcome",
+                    resource_id=outcome_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch order book for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching order book for {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for order book {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
 
         order_book = self._parse_order_book(outcome_id, data)
         order_book.validate_not_crossed()
 
         return order_book
+
+    async def get_tokens(self, token_ids: list[str]) -> list[dict[str, Any]]:
+        """Get token data for multiple tokens in batch.
+
+        Uses Data API v2 /tokens endpoint (added Oct 7, 2026).
+        Automatically chunks requests into batches of 50 tokens (API limit).
+
+        Args:
+            token_ids: List of Polymarket token_ids (any number)
+
+        Returns:
+            List of token data dictionaries for all requested tokens
+
+        Raises:
+            ValueError: If API returns invalid data or request fails
+        """
+        if not token_ids:
+            return []
+
+        results = []
+        chunk_size = 50
+
+        for i in range(0, len(token_ids), chunk_size):
+            chunk = token_ids[i : i + chunk_size]
+            url = f"{self.DATA_API_BASE}/tokens"
+            params = {"token_ids": ",".join(chunk)}
+
+            try:
+                response = await self._http_client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch tokens: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching tokens: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for tokens: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+
+            tokens: list[dict[str, Any]] = data.get("data", [])
+            results.extend(tokens)
+
+        return results
 
     async def get_price(self, outcome_id: str, side: OrderSide) -> Price:
         """Get best executable price for an outcome and side.
@@ -221,12 +384,48 @@ class PolymarketClient(BaseClient):
             response = await self._http_client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch price for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Outcome not found: {outcome_id}",
+                    resource_type="outcome",
+                    resource_id=outcome_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch price for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="polymarket",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching price for {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for price {outcome_id}: {e}",
+                venue="polymarket",
+                url=url,
+            ) from e
 
         raw_price = data.get("price")
         if raw_price is None:
-            raise ValueError(f"No liquidity for {side.value} on outcome {outcome_id}")
+            # Polymarket CLOB returns 200 with null price for both invalid IDs and no liquidity
+            # We can't distinguish, so raise NoLiquidityError
+            raise NoLiquidityError(
+                f"No liquidity for {side.value} on outcome {outcome_id}",
+                market_id=outcome_id,
+                side=side.value,
+            )
 
         normalized_price = Decimal(str(raw_price))
 
@@ -240,33 +439,126 @@ class PolymarketClient(BaseClient):
             currency=Currency.USDC,
         )
 
-    async def get_trades(
+    async def get_trades(  # type: ignore[override]
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
+        *,
+        page_size: int = 100,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
     ) -> AsyncIterator[Trade]:
-        """Get historical trades for an outcome.
+        """Get historical trades for an outcome (bounded).
 
         Uses Data API v2 /trades endpoint.
 
         Args:
             outcome_id: Polymarket token_id
-            limit: Results per page
-            **kwargs: Additional filters (start_ts, end_ts, etc.)
+            limit: Maximum total trades to return (default 100)
+            page_size: Results per API request (default 100, max 1000)
+            start_ts: Filter trades after this Unix timestamp (seconds)
+            end_ts: Filter trades before this Unix timestamp (seconds)
 
         Yields:
-            Trade objects
+            Trade objects (up to `limit` total)
+        """
+        url = f"{self.DATA_API_BASE}/trades"
+
+        yielded = 0
+        cursor: str | None = None
+
+        while yielded < limit:
+            # Request min(remaining, page_size) items
+            request_limit = min(limit - yielded, page_size, 1000)
+
+            params: dict[str, Any] = {
+                "asset_id": outcome_id,
+                "limit": request_limit,
+            }
+
+            if start_ts is not None:
+                params["start_ts"] = start_ts
+            if end_ts is not None:
+                params["end_ts"] = end_ts
+            if cursor:
+                params["cursor"] = cursor
+
+            try:
+                response = await self._http_client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+
+            trades = data.get("data", [])
+            if not trades:
+                break
+
+            for trade_data in trades:
+                if yielded >= limit:
+                    return
+                try:
+                    trade = self._parse_trade(outcome_id, trade_data)
+                    yield trade
+                    yielded += 1
+                except (KeyError, ValueError):
+                    continue
+
+            cursor = data.get("next_cursor")
+            if not cursor:
+                break
+
+    async def iter_trades(
+        self,
+        outcome_id: str,
+        *,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
+    ) -> AsyncIterator[Trade]:
+        """Iterate all historical trades for an outcome (unbounded).
+
+        Args:
+            outcome_id: Polymarket token_id
+            start_ts: Filter trades after this Unix timestamp (seconds)
+            end_ts: Filter trades before this Unix timestamp (seconds)
+
+        Yields:
+            Trade objects (all available)
         """
         url = f"{self.DATA_API_BASE}/trades"
         params: dict[str, Any] = {
             "asset_id": outcome_id,
-            "limit": limit,
+            "limit": 1000,  # Max per request
         }
 
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
+        if start_ts is not None:
+            params["start_ts"] = start_ts
+        if end_ts is not None:
+            params["end_ts"] = end_ts
 
         cursor: str | None = None
 
@@ -278,8 +570,32 @@ class PolymarketClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch trades for {outcome_id}: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="polymarket",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="polymarket",
+                    url=url,
+                ) from e
 
             trades = data.get("data", [])
             if not trades:
@@ -382,7 +698,60 @@ class PolymarketClient(BaseClient):
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
 
-        resolved = data.get("closed", False)
+        # Polymarket status determination
+        # Polymarket uses "closed" boolean, not an explicit status string
+        closed_flag = data.get("closed", False)
+
+        # Determine if market is actually resolved by checking outcome prices
+        # Polymarket doesn't provide explicit resolution status fields in practice
+        # (umaResolutionStatuses is always empty, resolvedBy/resolutionSource don't indicate status)
+        # Resolution is detected by checking if prices are settled to extreme values
+        #
+        # We use strict thresholds (>0.999 and <0.001) to minimize false positives
+        # from markets that trade near certainty but haven't been formally resolved yet
+        outcome_prices_str = data.get("outcomePrices", "[]")
+        is_resolved = False
+        winning_outcome_index = None
+
+        try:
+            if isinstance(outcome_prices_str, str):
+                import json
+
+                outcome_prices_list = json.loads(outcome_prices_str)
+            else:
+                outcome_prices_list = outcome_prices_str
+
+            if len(outcome_prices_list) >= 2:
+                p0 = float(outcome_prices_list[0])
+                p1 = float(outcome_prices_list[1])
+
+                # Strict settlement detection to avoid false positives
+                if p0 > 0.999 and p1 < 0.001:
+                    is_resolved = True
+                    winning_outcome_index = 0
+                elif p1 > 0.999 and p0 < 0.001:
+                    is_resolved = True
+                    winning_outcome_index = 1
+        except (ValueError, TypeError, json.JSONDecodeError):
+            pass
+
+        # Determine venue_status and normalized status
+        # Price-based resolution detection only applies to closed markets
+        if closed_flag:
+            if is_resolved:
+                venue_status = "resolved"
+                status = MarketStatus.RESOLVED
+            else:
+                venue_status = "closed"
+                status = MarketStatus.CLOSED
+        else:
+            venue_status = "open"
+            status = MarketStatus.OPEN
+            # Open markets are never resolved, even if prices are near 0/1
+            is_resolved = False
+            winning_outcome_index = None
+
+        resolved = is_resolved
 
         volume = None
         if "volumeNum" in data:
@@ -453,6 +822,15 @@ class PolymarketClient(BaseClient):
                 )
             )
 
+        # Determine winning outcome name if resolved
+        winning_outcome_name = None
+        if (
+            is_resolved
+            and winning_outcome_index is not None
+            and winning_outcome_index < len(outcomes)
+        ):
+            winning_outcome_name = outcomes[winning_outcome_index].name
+
         return Market(
             id=condition_id,
             venue="polymarket",
@@ -462,6 +840,9 @@ class PolymarketClient(BaseClient):
             created_at=created_at,
             end_date=end_date,
             resolved=resolved,
+            venue_status=venue_status,
+            status=status,
+            winning_outcome=winning_outcome_name,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=best_bid_size,
@@ -488,6 +869,17 @@ class PolymarketClient(BaseClient):
         except (ValueError, TypeError):
             created_at = datetime.now(timezone.utc)
 
+        # Determine venue_status for partial market
+        venue_status_raw = data.get("status") or data.get("marketStatus")
+        closed_flag = data.get("closed", False)
+
+        if venue_status_raw:
+            venue_status = str(venue_status_raw)
+        elif closed_flag:
+            venue_status = "closed"
+        else:
+            venue_status = "open"
+
         return Market(
             id=str(condition_id),
             venue="polymarket",
@@ -497,6 +889,9 @@ class PolymarketClient(BaseClient):
             created_at=created_at,
             end_date=None,
             resolved=False,
+            venue_status=venue_status,
+            status=None,  # Don't normalize for partial markets
+            winning_outcome=None,
             volume=None,
             open_interest=None,
             best_bid_size=None,
@@ -514,7 +909,8 @@ class PolymarketClient(BaseClient):
         timestamp_str = data.get("timestamp")
         if timestamp_str:
             try:
-                timestamp = datetime.fromtimestamp(float(timestamp_str), tz=timezone.utc)
+                # Polymarket CLOB timestamps are in milliseconds
+                timestamp = parse_timestamp(timestamp_str, is_milliseconds=True)
             except (ValueError, TypeError):
                 timestamp = datetime.now(timezone.utc)
         else:
@@ -605,7 +1001,8 @@ class PolymarketClient(BaseClient):
         if timestamp_val:
             try:
                 if isinstance(timestamp_val, (int, float)):
-                    timestamp = datetime.fromtimestamp(timestamp_val, tz=timezone.utc)
+                    # Polymarket trade timestamps are in seconds
+                    timestamp = parse_timestamp(timestamp_val, is_milliseconds=False)
                 else:
                     timestamp = parser.isoparse(str(timestamp_val))
                     if timestamp.tzinfo is None:

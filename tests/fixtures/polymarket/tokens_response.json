@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "token_id": "54533043819946592547517511176940999955633860128497669742211153063842200957669",
+      "condition_id": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+      "structural_condition_id": null,
+      "module": "v1_ctf",
+      "outcome_index": 1,
+      "clob_index": 0,
+      "outcome": "Yes",
+      "opposite_token_id": "87854174148074652060467921081181402357467303721471806610111179101805869578687",
+      "resolved": false,
+      "final_price": null,
+      "title": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+      "market_slug": "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568",
+      "closed": false,
+      "neg_risk": true,
+      "neg_risk_market_id": "0x2c3d7e0eee6f058be3006baabf0d54a07da254ba47fe6e3e095e7990c7814700",
+      "question_index": 0,
+      "event_id": 30829,
+      "event_slug": "democratic-presidential-nominee-2028"
+    },
+    {
+      "token_id": "32338220190071351435772801779725302244575775216413325951443816017994629993401",
+      "condition_id": "0xa467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7",
+      "structural_condition_id": null,
+      "module": "v1_ctf",
+      "outcome_index": 0,
+      "clob_index": 0,
+      "outcome": "Yes",
+      "opposite_token_id": "25659310674993675562345759665114759892400026242514633218387667107987341231962",
+      "resolved": false,
+      "final_price": null,
+      "title": "Xi Jinping out before 2027?",
+      "market_slug": "xi-jinping-out-before-2027",
+      "closed": false,
+      "neg_risk": false,
+      "neg_risk_market_id": null,
+      "question_index": null,
+      "event_id": 30828,
+      "event_slug": "xi-jinping-out-before-2027"
+    }
+  ]
+}

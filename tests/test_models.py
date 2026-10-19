@@ -8,6 +8,7 @@ import pytest
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -197,3 +198,98 @@ def test_trade_creation():
     assert trade.side == OrderSide.BUY
     assert trade.price == Decimal("0.65")
     assert trade.size == Decimal("100")
+
+
+def test_all_model_datetimes_are_utc_aware():
+    """Test that the model contract enforces UTC-aware datetimes."""
+    from datetime import datetime, timezone
+
+    # Try to create a Market with naive datetime (should fail or be rejected)
+    # The model validator should enforce UTC
+    naive_dt = datetime(2021, 1, 1, 0, 0, 0)  # No timezone
+    utc_dt = datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Our model should accept UTC datetimes
+    market = Market(
+        id="test",
+        venue="test",
+        question="Test?",
+        outcomes=[],
+        created_at=utc_dt,
+        end_date=utc_dt,
+    )
+
+    assert market.created_at.tzinfo == timezone.utc
+    assert market.end_date.tzinfo == timezone.utc
+
+    # Test with naive datetime - the validator should convert or raise
+    try:
+        market_naive = Market(
+            id="test2",
+            venue="test",
+            question="Test?",
+            outcomes=[],
+            created_at=naive_dt,  # Naive datetime
+        )
+        # If it doesn't raise, it should have been converted to UTC
+        assert market_naive.created_at.tzinfo == timezone.utc
+    except ValueError:
+        # It's also acceptable to reject naive datetimes
+        pass
+
+
+def test_resolution_invariant_resolved_without_resolved_status():
+    """Test that resolved=True requires status=RESOLVED."""
+    from datetime import datetime, timezone
+
+    utc_dt = datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Try to create market with resolved=True but status != RESOLVED
+    with pytest.raises(ValueError, match="resolved=True if and only if status=RESOLVED"):
+        Market(
+            id="test",
+            venue="test",
+            question="Test?",
+            outcomes=[],
+            created_at=utc_dt,
+            resolved=True,  # resolved=True
+            status=MarketStatus.OPEN,  # but status=OPEN
+        )
+
+
+def test_resolution_invariant_resolved_status_without_resolved():
+    """Test that status=RESOLVED requires resolved=True."""
+    from datetime import datetime, timezone
+
+    utc_dt = datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Try to create market with status=RESOLVED but resolved=False
+    with pytest.raises(ValueError, match="resolved must be True when status is RESOLVED"):
+        Market(
+            id="test",
+            venue="test",
+            question="Test?",
+            outcomes=[],
+            created_at=utc_dt,
+            status=MarketStatus.RESOLVED,  # status=RESOLVED
+            resolved=False,  # but resolved=False
+        )
+
+
+def test_resolution_invariant_winning_outcome_without_resolved():
+    """Test that winning_outcome requires resolved=True."""
+    from datetime import datetime, timezone
+
+    utc_dt = datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # Try to create market with winning_outcome but resolved=False
+    with pytest.raises(ValueError, match="winning_outcome should only be set when resolved=True"):
+        Market(
+            id="test",
+            venue="test",
+            question="Test?",
+            outcomes=[],
+            created_at=utc_dt,
+            winning_outcome="Yes",  # has winner
+            resolved=False,  # but not resolved
+        )

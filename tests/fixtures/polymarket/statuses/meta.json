@@ -1,0 +1,23 @@
+{
+  "description": "Polymarket market status fixtures recorded from live API",
+  "recorded_at": "2026-10-19",
+  "note": "Polymarket uses 'closed' boolean field. Resolution determined by outcome prices settled to 0/1.",
+  "statuses": {
+    "open": {
+      "description": "Open market (closed=false)",
+      "expected_normalized_status": "open",
+      "expected_resolved": false
+    },
+    "closed": {
+      "description": "Closed but unresolved market (closed=true, prices not settled)",
+      "expected_normalized_status": "closed",
+      "expected_resolved": false
+    },
+    "resolved": {
+      "description": "Resolved market (closed=true, prices settled to 0/1)",
+      "expected_normalized_status": "resolved",
+      "expected_resolved": true,
+      "has_winning_outcome": true
+    }
+  }
+}

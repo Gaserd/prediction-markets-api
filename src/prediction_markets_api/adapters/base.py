@@ -106,17 +106,37 @@ class BaseClient(ABC):
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
     ) -> AsyncIterator[Trade]:
-        """Get historical trades for an outcome.
+        """Get historical trades for an outcome (bounded).
 
         Args:
             outcome_id: Venue-specific outcome identifier
-            limit: Maximum results per page
-            **kwargs: Venue-specific filters
+            limit: Maximum total trades to return (default 100)
 
         Yields:
-            Trade objects
+            Trade objects (up to `limit` total)
+
+        Note:
+            Venue-specific filters should be keyword-only arguments
+            in the concrete implementation.
+        """
+
+    @abstractmethod
+    async def iter_trades(
+        self,
+        outcome_id: str,
+    ) -> AsyncIterator[Trade]:
+        """Iterate all available trades for an outcome (unbounded).
+
+        Args:
+            outcome_id: Venue-specific outcome identifier
+
+        Yields:
+            Trade objects (all available)
+
+        Note:
+            Venue-specific filters should be keyword-only arguments
+            in the concrete implementation.
         """
         raise NotImplementedError
         yield  # pragma: no cover

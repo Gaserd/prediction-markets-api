@@ -19,9 +19,16 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.exceptions import (
+    NoLiquidityError,
+    NotFoundError,
+    RateLimitError,
+    VenueAPIError,
+)
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -29,6 +36,7 @@ from prediction_markets_api.models.base import (
     Price,
     Trade,
 )
+from prediction_markets_api.utils import parse_timestamp
 
 
 class LimitlessClient(BaseClient):
@@ -74,7 +82,7 @@ class LimitlessClient(BaseClient):
         """List markets using Limitless API page pagination.
 
         Args:
-            closed: Filter by closed status (None = all, False = active only)
+            closed: Filter by closed status (None = all, False = active only, True = not supported)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 25)
             venue_params: Venue-specific parameters as a dict (optional, unused by Limitless)
@@ -83,8 +91,16 @@ class LimitlessClient(BaseClient):
             Market objects (up to `limit` total)
 
         Raises:
+            NotImplementedError: If closed=True (Limitless API only provides /markets/active)
             ValueError: If API returns invalid data
         """
+        if closed is True:
+            raise NotImplementedError(
+                "Limitless API does not provide an endpoint for listing closed or resolved markets. "
+                "Only active markets are available via /markets/active. "
+                "Use closed=False or closed=None to list active markets."
+            )
+
         url = f"{self.API_BASE}/markets/active"
         params: dict[str, Any] = {"limit": min(page_size, 25)}
 
@@ -98,8 +114,32 @@ class LimitlessClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch markets: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="limitless",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch markets: {e}",
+                        status_code=e.response.status_code,
+                        venue="limitless",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching markets: {e}",
+                    venue="limitless",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response: {e}",
+                    venue="limitless",
+                    url=url,
+                ) from e
 
             markets = data.get("data", [])
             if not markets:
@@ -148,8 +188,38 @@ class LimitlessClient(BaseClient):
             response = await self._http_client.get(url)
             response.raise_for_status()
             market_data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch market {market_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Market not found: {market_id}",
+                    resource_type="market",
+                    resource_id=market_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="limitless",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch market {market_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="limitless",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching market {market_id}: {e}",
+                venue="limitless",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for market {market_id}: {e}",
+                venue="limitless",
+                url=url,
+            ) from e
 
         return self._parse_market(market_data)
 
@@ -175,8 +245,38 @@ class LimitlessClient(BaseClient):
             response = await self._http_client.get(url)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch order book for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Order book not found for market: {outcome_id}",
+                    resource_type="market",
+                    resource_id=outcome_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="limitless",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch order book for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="limitless",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching order book for {outcome_id}: {e}",
+                venue="limitless",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for order book {outcome_id}: {e}",
+                venue="limitless",
+                url=url,
+            ) from e
 
         order_book = self._parse_order_book(outcome_id, data)
         order_book.validate_not_crossed()
@@ -204,13 +304,35 @@ class LimitlessClient(BaseClient):
 
         if side == OrderSide.BUY:
             if not order_book.asks:
-                raise ValueError(f"No liquidity to buy (no asks) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to buy (no asks) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="BUY",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.asks[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
         else:
             if not order_book.bids:
-                raise ValueError(f"No liquidity to sell (no bids) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to sell (no bids) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="SELL",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.bids[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
@@ -225,42 +347,87 @@ class LimitlessClient(BaseClient):
             currency=Currency.USDC,
         )
 
-    async def get_trades(
+    async def get_trades(  # type: ignore[override]
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
     ) -> AsyncIterator[Trade]:
-        """Get historical trades for an outcome.
+        """Get historical trades for an outcome (bounded).
+
+        Note: Limitless API returns one page only, no pagination available.
 
         Args:
             outcome_id: Limitless slug
-            limit: Results per page
-            **kwargs: Additional filters (page, etc.)
+            limit: Maximum trades to return (default 100, max 100)
 
         Yields:
-            Trade objects
+            Trade objects (up to `limit` total, max 100 from API)
         """
         url = f"{self.API_BASE}/markets/{outcome_id}/events"
         params: dict[str, Any] = {
             "limit": min(limit, 100),
-            "page": kwargs.get("page", 1),
         }
 
         try:
             response = await self._http_client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch trades for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="limitless",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch trades for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="limitless",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching trades for {outcome_id}: {e}",
+                venue="limitless",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for trades {outcome_id}: {e}",
+                venue="limitless",
+                url=url,
+            ) from e
 
         events = data.get("events", [])
+        yielded = 0
         for event_data in events:
+            if yielded >= limit:
+                return
             try:
                 trade = self._parse_trade(outcome_id, event_data)
                 yield trade
+                yielded += 1
             except (KeyError, ValueError):
                 continue
+
+    async def iter_trades(
+        self,
+        outcome_id: str,
+    ) -> AsyncIterator[Trade]:
+        """Iterate all available trades for an outcome.
+
+        Note: Limitless API returns one page only (max 100), no pagination available.
+        This is equivalent to get_trades(outcome_id, limit=100).
+
+        Args:
+            outcome_id: Limitless slug
+
+        Yields:
+            Trade objects (max 100 from API)
+        """
+        async for trade in self.get_trades(outcome_id, limit=100):
+            yield trade
 
     async def place_order(
         self,
@@ -351,13 +518,41 @@ class LimitlessClient(BaseClient):
         end_date_ts = data.get("expirationTimestamp")
         if end_date_ts:
             try:
-                end_date = datetime.fromtimestamp(end_date_ts / 1000, tz=timezone.utc)
+                # Limitless timestamps are in milliseconds
+                end_date = parse_timestamp(end_date_ts, is_milliseconds=True)
             except (ValueError, TypeError):
                 pass
 
-        status = data.get("status", "")
+        # Limitless status mapping
+        venue_status = data.get("status", "")
         expired = data.get("expired", False)
-        resolved = status == "RESOLVED" or expired
+        result = data.get("result")  # Winning outcome when resolved
+
+        # Map to normalized status
+        status_map = {
+            "funded": MarketStatus.OPEN,  # Market is active and funded
+            "active": MarketStatus.OPEN,
+            "open": MarketStatus.OPEN,
+            "resolved": MarketStatus.RESOLVED,
+            "closed": MarketStatus.CLOSED,
+        }
+
+        status = status_map.get(venue_status.lower())
+        if status is None and venue_status:
+            import logging
+
+            logging.warning(
+                f"Unknown Limitless market status '{venue_status}' for market {slug}. "
+                "This status will not be normalized."
+            )
+
+        # Market is resolved only if status is RESOLVED or has a result
+        # Expiry alone does not mean resolution
+        resolved = venue_status.upper() == "RESOLVED" or result is not None
+
+        # If market is expired but not resolved, it should be CLOSED
+        if expired and not resolved and status == MarketStatus.OPEN:
+            status = MarketStatus.CLOSED
 
         volume = None
         volume_str = data.get("volumeFormatted")
@@ -415,6 +610,16 @@ class LimitlessClient(BaseClient):
                 )
             )
 
+        # Determine winning outcome if result is present
+        winning_outcome_name = None
+        if result is not None and resolved:
+            # result could be "yes", "no", or other values
+            result_str = str(result).lower()
+            for outcome in outcomes:
+                if outcome.name.lower() == result_str:
+                    winning_outcome_name = outcome.name
+                    break
+
         return Market(
             id=slug,
             venue="limitless",
@@ -424,6 +629,9 @@ class LimitlessClient(BaseClient):
             created_at=created_at,
             end_date=end_date,
             resolved=resolved,
+            venue_status=venue_status,
+            status=status,
+            winning_outcome=winning_outcome_name,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=None,
