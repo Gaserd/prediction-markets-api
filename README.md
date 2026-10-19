@@ -326,7 +326,7 @@ export POLYMARKET_WALLET_ADDRESS="0x..."
 |-------|-------|--------|------|-------|----------------|-----------------|------------------|-------------|
 | Polymarket | Polygon | ✅ Implemented | ✅ | — | No | Yes | US blocked | [Link](https://polymarket.com) |
 | Kalshi | None | ✅ Implemented | ✅ | — | No | Yes | US only | [Link](https://kalshi.com) |
-| Limitless | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://limitless.exchange) |
+| Limitless | Base | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://limitless.exchange) |
 | Hyperliquid Outcomes (HIP-4) | Hyperliquid | 🚧 Planned | — | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
 | Predict.fun | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://predict.fun) |
 | Opinion | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://opinion.finance) |
