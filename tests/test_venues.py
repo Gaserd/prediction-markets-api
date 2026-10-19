@@ -212,7 +212,10 @@ def test_referral_disclosure_only_in_designated_section():
                     # Allow pointer sentences that reference the designated section
                     if pointer_pattern in line:
                         continue
-                    raise AssertionError(f"'{keyword}' mentioned outside 'Venues & referral links' section " f"at line ~{i}: {line.strip()}")
+                    raise AssertionError(
+                        f"'{keyword}' mentioned outside 'Venues & referral links' section "
+                        f"at line ~{i}: {line.strip()}"
+                    )
 
 
 def test_referral_params_only_in_designated_section():
@@ -250,4 +253,6 @@ def test_referral_params_only_in_designated_section():
         matches = re.finditer(link_pattern, rest_of_readme)
         for match in matches:
             url = match.group(1)
-            raise AssertionError(f"Link with referral parameter found outside designated section: {url}")
+            raise AssertionError(
+                f"Link with referral parameter found outside designated section: {url}"
+            )
