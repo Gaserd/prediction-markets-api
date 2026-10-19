@@ -401,8 +401,9 @@ class KalshiClient(BaseClient):
         Yields:
             Trade objects
         """
-        url = f"{self.API_BASE}/markets/{outcome_id}/trades"
+        url = f"{self.API_BASE}/markets/trades"
         params: dict[str, Any] = {
+            "ticker": outcome_id,
             "limit": limit,
         }
 

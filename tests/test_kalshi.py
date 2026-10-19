@@ -148,9 +148,10 @@ async def test_get_trades(respx_mock):
     ticker = markets_data["markets"][0]["ticker"]
     trades_data = load_fixture("trades_response.json")
 
-    respx_mock.get(f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}/trades").mock(
-        return_value=httpx.Response(200, json=trades_data)
-    )
+    respx_mock.get(
+        "https://api.elections.kalshi.com/trade-api/v2/markets/trades",
+        params={"ticker": ticker, "limit": 10},
+    ).mock(return_value=httpx.Response(200, json=trades_data))
 
     async with KalshiClient() as client:
         trades = []
