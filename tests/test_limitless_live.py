@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from prediction_markets_api import LimitlessClient
+from prediction_markets_api.exceptions import NoLiquidityError
 from prediction_markets_api.models.base import Market, OrderSide
 
 
@@ -88,7 +89,7 @@ async def test_get_order_book_live():
                 book = await client.get_order_book(market.id)
                 clob_slug = market.id
                 break
-            except ValueError:
+            except (ValueError, NoLiquidityError):
                 # May be AMM or non-tradeable
                 continue
 
@@ -128,7 +129,7 @@ async def test_get_price_live():
                 if book.bids and book.asks:
                     slug_with_liquidity = market.id
                     break
-            except ValueError:
+            except (ValueError, NoLiquidityError):
                 continue
 
         if not slug_with_liquidity:
@@ -141,13 +142,13 @@ async def test_get_price_live():
         try:
             buy_price = await client.get_price(slug_with_liquidity, OrderSide.BUY)
             print(f"\nBuy price (best ask): {buy_price.price}")
-        except ValueError as e:
+        except NoLiquidityError as e:
             print(f"\nNo buy liquidity: {e}")
 
         try:
             sell_price = await client.get_price(slug_with_liquidity, OrderSide.SELL)
             print(f"Sell price (best bid): {sell_price.price}")
-        except ValueError as e:
+        except NoLiquidityError as e:
             print(f"No sell liquidity: {e}")
 
         # At least one should work
@@ -178,7 +179,7 @@ async def test_get_price_matches_book_live():
                 if book.bids and book.asks:
                     slug_with_both_sides = market.id
                     break
-            except ValueError:
+            except (ValueError, NoLiquidityError):
                 continue
 
         if not slug_with_both_sides:
@@ -229,7 +230,7 @@ async def test_get_trades_live():
         try:
             async for trade in client.get_trades(slug, limit=5):
                 trades.append(trade)
-        except ValueError:
+        except (ValueError, NoLiquidityError):
             # Trades endpoint may not have data for all markets
             pass
 
