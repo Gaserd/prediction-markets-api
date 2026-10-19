@@ -1,0 +1,5 @@
+{
+  "synthetic": true,
+  "source": "Hand-built test fixture from PR #5 (commit f78a463) to test Polymarket resolution detection",
+  "description": "Synthetic open Polymarket market with price >0.999 (near-certain outcome) - must NOT be marked resolved. Tests that resolution requires both closed=true AND price settlement, not just high price."
+}
