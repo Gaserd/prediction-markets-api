@@ -376,13 +376,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from prediction_markets_api.models.base import Market, Outcome, Currency
 
+market_id = "0x1234..."
 market = Market(
-    id="0x1234...",
+    id=market_id,
     venue="polymarket",
     question="Will Bitcoin reach $100k by Dec 31?",
     outcomes=[
-        Outcome(id="token_yes", name="Yes", price=Decimal("0.65")),
-        Outcome(id="token_no", name="No", price=Decimal("0.35")),
+        Outcome(id="token_yes", market_id=market_id, name="Yes", price=Decimal("0.65")),
+        Outcome(id="token_no", market_id=market_id, name="No", price=Decimal("0.35")),
     ],
     created_at=datetime(2026, 1, 15, tzinfo=timezone.utc),
     end_date=datetime(2026, 12, 31, tzinfo=timezone.utc),

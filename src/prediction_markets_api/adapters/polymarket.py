@@ -209,7 +209,12 @@ class PolymarketClient(BaseClient):
                 url=url,
             ) from e
 
-        markets = data.get("markets", [])
+        # Handle both formats: {"markets": [...]} or [...]
+        if isinstance(data, list):
+            markets = data
+        else:
+            markets = data.get("markets", [])
+
         if not markets:
             raise NotFoundError(
                 f"Market not found: {market_id}",
