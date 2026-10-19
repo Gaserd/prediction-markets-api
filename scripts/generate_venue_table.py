@@ -25,15 +25,13 @@ def load_signup_links() -> dict[str, str]:
 
 def generate_venue_table() -> str:
     """Generate markdown table of venues."""
-    signup_links = load_signup_links()
-
     lines = [
         "## Supported Venues",
         "",
-        "**Note**: Signup links are referral links; the project receives a reward when you sign up.",
+        "Sign-up links and referral disclosure: see [Venues & referral links](#venues--referral-links).",
         "",
-        "| Venue | Chain | Status | Read | Trade | API Key (Read) | API Key (Trade) | Geo Restrictions | Signup Link |",
-        "|-------|-------|--------|------|-------|----------------|-----------------|------------------|-------------|",
+        "| Venue | Chain | Status | Read | Trade | API Key (Read) | API Key (Trade) | Geo Restrictions | Link |",
+        "|-------|-------|--------|------|-------|----------------|-----------------|------------------|------|",
     ]
 
     # Sort venues by wave (defined by their order in the registry)
@@ -58,13 +56,12 @@ def generate_venue_table() -> str:
         # Chain
         chain = venue.chain.value if venue.chain else "Unknown"
 
-        # Signup link (with note about referral)
-        signup_url = signup_links.get(venue.signup_link_key, "#")
-        signup_link = f"[Link]({signup_url})"
+        # Plain link from registry (no referral)
+        plain_link = f"[Link]({venue.url})"
 
         lines.append(
             f"| {venue.name} | {chain} | {status_text} | {read_icon} | {trade_icon} | "
-            f"{api_read} | {api_trade} | {geo} | {signup_link} |"
+            f"{api_read} | {api_trade} | {geo} | {plain_link} |"
         )
 
     return "\n".join(lines)

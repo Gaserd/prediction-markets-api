@@ -177,3 +177,77 @@ def test_referral_links_in_readme():
             assert "| no |" in venue_line[0], (
                 f"Non-referral link for {venue.name} should be marked 'no' in README"
             )
+
+
+def test_referral_disclosure_only_in_designated_section():
+    """Test that referral/reward mentions only appear in the 'Venues & referral links' section."""
+    readme_path = Path(__file__).parent.parent / "README.md"
+    readme_content = readme_path.read_text()
+
+    # Find the designated section
+    section_start = readme_content.find("## Venues & referral links")
+    assert section_start != -1, "Venues & referral links section not found"
+
+    # Find the end of the section (next ## heading or end of file)
+    section_end = readme_content.find("\n## ", section_start + 1)
+    if section_end == -1:
+        section_end = len(readme_content)
+
+    readme_content[section_start:section_end]
+    rest_of_readme = readme_content[:section_start] + readme_content[section_end:]
+
+    # Check that referral/reward keywords only appear in the designated section
+    # Exception: pointer sentences that reference the designated section are allowed
+    referral_keywords = ["referral", "reward"]
+    pointer_pattern = "see [Venues & referral links]"
+
+    for keyword in referral_keywords:
+        keyword_lower = keyword.lower()
+        # Case-insensitive search in the rest of README
+        if keyword_lower in rest_of_readme.lower():
+            # Find where it appears
+            lines = rest_of_readme.split("\n")
+            for i, line in enumerate(lines):
+                if keyword_lower in line.lower():
+                    # Allow pointer sentences that reference the designated section
+                    if pointer_pattern in line:
+                        continue
+                    raise AssertionError(f"'{keyword}' mentioned outside 'Venues & referral links' section " f"at line ~{i}: {line.strip()}")
+
+
+def test_referral_params_only_in_designated_section():
+    """Test that links with referral params only appear in 'Venues & referral links' section."""
+    readme_path = Path(__file__).parent.parent / "README.md"
+    readme_content = readme_path.read_text()
+
+    # Find the designated section
+    section_start = readme_content.find("## Venues & referral links")
+    section_end = readme_content.find("\n## ", section_start + 1)
+    if section_end == -1:
+        section_end = len(readme_content)
+
+    designated_section = readme_content[section_start:section_end]
+    rest_of_readme = readme_content[:section_start] + readme_content[section_end:]
+
+    # Check that all referral URLs from registry only appear in designated section
+    for _venue_key, venue in VENUES.items():
+        if venue.referral_url and "?" in venue.referral_url:
+            # This is a referral link with parameters
+            assert venue.referral_url in designated_section, (
+                f"Referral URL for {venue.name} not found in designated section"
+            )
+            assert venue.referral_url not in rest_of_readme, (
+                f"Referral URL for {venue.name} found outside designated section"
+            )
+
+    # Also check that no URL with common referral parameters appears outside
+    referral_params = ["?r=", "?ref=", "?referral=", "&r=", "&ref=", "&referral="]
+    for param in referral_params:
+        # Search for markdown links with these params
+        import re
+
+        link_pattern = rf"\[.*?\]\((https?://[^\)]*{re.escape(param)}[^\)]*)\)"
+        matches = re.finditer(link_pattern, rest_of_readme)
+        for match in matches:
+            url = match.group(1)
+            raise AssertionError(f"Link with referral parameter found outside designated section: {url}")

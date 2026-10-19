@@ -227,11 +227,7 @@ async def test_get_trades_live():
 
         # Get trades (may be empty)
         trades = []
-        try:
-            async for trade in client.get_trades(slug, limit=5):
-                trades.append(trade)
-        except NoLiquidityError:
-            # Trades endpoint may not have data for all markets
-            pass
+        async for trade in client.get_trades(slug, limit=5):
+            trades.append(trade)
 
         print(f"\nFetched {len(trades)} trades for {slug}")

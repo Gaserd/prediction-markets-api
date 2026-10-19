@@ -390,10 +390,10 @@ Trading and builder-code attribution are not part of 0.9 (read-only). How builde
 
 ## Supported Venues
 
-**Note**: Signup links are referral links; the project receives a reward when you sign up.
+Sign-up links and referral disclosure: see [Venues & referral links](#venues--referral-links).
 
-| Venue | Chain | Status | Read | Trade | API Key (Read) | API Key (Trade) | Geo Restrictions | Signup Link |
-|-------|-------|--------|------|-------|----------------|-----------------|------------------|-------------|
+| Venue | Chain | Status | Read | Trade | API Key (Read) | API Key (Trade) | Geo Restrictions | Link |
+|-------|-------|--------|------|-------|----------------|-----------------|------------------|------|
 | Polymarket | Polygon | ✅ Implemented | ✅ | — | No | Yes | US blocked | [Link](https://polymarket.com) |
 | Kalshi | None | ✅ Implemented | ✅ | — | No | Yes | US only | [Link](https://kalshi.com) |
 | Limitless | Base | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://limitless.exchange) |
