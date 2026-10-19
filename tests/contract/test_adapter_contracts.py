@@ -412,13 +412,9 @@ async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_cl
     with respx.mock:
         # Mock the appropriate endpoint for each adapter
         if adapter_config.name == "kalshi":
-            respx.get(url__regex=r".*/orderbook.*").mock(
-                return_value=Response(200, json=data)
-            )
+            respx.get(url__regex=r".*/orderbook.*").mock(return_value=Response(200, json=data))
         elif adapter_config.name == "limitless":
-            respx.get(url__regex=r".*/orderbook.*").mock(
-                return_value=Response(200, json=data)
-            )
+            respx.get(url__regex=r".*/orderbook.*").mock(return_value=Response(200, json=data))
         else:
             respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
 
@@ -524,9 +520,7 @@ async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, ada
     with respx.mock:
         # Mock order book endpoint for both get_order_book and get_price where applicable
         if adapter_config.name == "polymarket":
-            respx.get(url__regex=r".*/book.*").mock(
-                return_value=Response(200, json=orderbook_data)
-            )
+            respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=orderbook_data))
         elif adapter_config.name == "kalshi":
             # Kalshi uses /orderbook for both get_order_book and get_price
             respx.get(url__regex=r".*/orderbook.*").mock(
@@ -551,16 +545,14 @@ async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, ada
             # BUY action queries side=SELL (ask), SELL action queries side=BUY (bid)
 
             # Mock for BUY (queries side=SELL, gets ask price)
-            respx.get(
-                url__regex=r".*/price.*",
-                params__contains={"side": "SELL"}
-            ).mock(return_value=Response(200, json=prices_fixture.get("buy", {"price": "0"})))
+            respx.get(url__regex=r".*/price.*", params__contains={"side": "SELL"}).mock(
+                return_value=Response(200, json=prices_fixture.get("buy", {"price": "0"}))
+            )
 
             # Mock for SELL (queries side=BUY, gets bid price)
-            respx.get(
-                url__regex=r".*/price.*",
-                params__contains={"side": "BUY"}
-            ).mock(return_value=Response(200, json=prices_fixture.get("sell", {"price": "0"})))
+            respx.get(url__regex=r".*/price.*", params__contains={"side": "BUY"}).mock(
+                return_value=Response(200, json=prices_fixture.get("sell", {"price": "0"}))
+            )
 
         # Get order book to extract expected best bid/ask
         book = await adapter_client.get_order_book(outcome_id)
@@ -746,52 +738,71 @@ def test_fixture_hygiene(adapter_config, adapter_fixtures):
         with open(meta_file) as f:
             meta = json.load(f)
 
-        assert "recorded_at" in meta, f"Meta file {meta_file.name} missing 'recorded_at'"
-
-        # Validate recorded_at is parseable ISO-8601
-        recorded_at_str = meta["recorded_at"]
-        try:
-            datetime.fromisoformat(recorded_at_str)
-        except ValueError as e:
-            pytest.fail(f"Invalid ISO-8601 timestamp in {meta_file.name}: {recorded_at_str} - {e}")
-
-        # Support multiple formats:
-        # 1. 'request': {url, method} - single nested object (Polymarket)
-        # 2. 'requests': [{url, method}, ...] - multiple nested objects
-        # 3. Top-level url and method - Kalshi format
-        # 4. 'request': "METHOD /path" - string format (Limitless)
-
-        has_request_info = False
-
-        if "request" in meta:
-            request = meta["request"]
-            if isinstance(request, str):
-                # String format: "GET /path" (Limitless)
-                has_request_info = True
-                # Validate it looks like "METHOD /path"
-                parts = request.split(None, 1)
-                assert len(parts) >= 2, (
-                    f"Meta file {meta_file.name} request string must be 'METHOD /path', got: {request}"
+        # Validate recorded_at or synthetic flag
+        if meta.get("synthetic"):
+            # Synthetic fixtures don't need recorded_at
+            assert "source" in meta, (
+                f"Synthetic meta file {meta_file.name} must have 'source' field"
+            )
+        else:
+            # Real fixtures must have valid recorded_at
+            assert "recorded_at" in meta, f"Meta file {meta_file.name} missing 'recorded_at'"
+            recorded_at_str = meta["recorded_at"]
+            try:
+                # Python 3.10 fromisoformat doesn't accept trailing 'Z'
+                # Replace 'Z' with '+00:00' for compatibility
+                normalized = recorded_at_str.replace("Z", "+00:00")
+                datetime.fromisoformat(normalized)
+            except ValueError as e:
+                pytest.fail(
+                    f"Invalid ISO-8601 timestamp in {meta_file.name}: {recorded_at_str} - {e}"
                 )
-            elif isinstance(request, dict):
-                # Object format (Polymarket)
-                has_request_info = True
-                assert "url" in request, f"Meta file {meta_file.name} request missing 'url'"
-                assert "method" in request, f"Meta file {meta_file.name} request missing 'method'"
-        elif "requests" in meta:
-            # Multiple requests format
-            has_request_info = True
-            for req in meta["requests"]:
-                assert "url" in req, f"Meta file {meta_file.name} request missing 'url'"
-                assert "method" in req, f"Meta file {meta_file.name} request missing 'method'"
-        elif "url" in meta and "method" in meta:
-            # Top-level format (Kalshi)
-            has_request_info = True
 
-        assert has_request_info, (
-            f"Meta file {meta_file.name} missing request info. "
-            "Expected 'request' (string/object), 'requests' (array), or top-level 'url'/'method' fields."
-        )
+        # Validate request info (skip for synthetic fixtures)
+        if not meta.get("synthetic"):
+            # Support multiple formats:
+            # 1. 'request': {url, method} - single nested object (Polymarket)
+            # 2. 'requests': [{url, method}, ...] - multiple nested objects
+            # 3. Top-level url and method - Kalshi format
+            # 4. 'request': "METHOD /path" - string format (Limitless)
+
+            has_request_info = False
+
+            if "request" in meta:
+                request = meta["request"]
+                if isinstance(request, str):
+                    # String format: "GET /path" (Limitless)
+                    has_request_info = True
+                    # Validate it looks like "METHOD /path"
+                    parts = request.split(None, 1)
+                    assert len(parts) >= 2, (
+                        f"Meta file {meta_file.name} request string must be 'METHOD /path', got: {request}"
+                    )
+                elif isinstance(request, dict):
+                    # Object format (Polymarket)
+                    has_request_info = True
+                    assert (
+                        "url" in request
+                    ), f"Meta file {meta_file.name} request missing 'url'"
+                    assert (
+                        "method" in request
+                    ), f"Meta file {meta_file.name} request missing 'method'"
+            elif "requests" in meta:
+                # Multiple requests format
+                has_request_info = True
+                for req in meta["requests"]:
+                    assert "url" in req, f"Meta file {meta_file.name} request missing 'url'"
+                    assert (
+                        "method" in req
+                    ), f"Meta file {meta_file.name} request missing 'method'"
+            elif "url" in meta and "method" in meta:
+                # Top-level format (Kalshi)
+                has_request_info = True
+
+            assert has_request_info, (
+                f"Meta file {meta_file.name} missing request info. "
+                "Expected 'request' (string/object), 'requests' (array), or top-level 'url'/'method' fields."
+            )
 
 
 # =============================================================================
@@ -888,7 +899,9 @@ def test_no_type_ignore_override_in_adapters():
     """
     from pathlib import Path
 
-    adapters_dir = Path(__file__).parent.parent.parent / "src" / "prediction_markets_api" / "adapters"
+    adapters_dir = (
+        Path(__file__).parent.parent.parent / "src" / "prediction_markets_api" / "adapters"
+    )
 
     adapter_files = []
     for f in adapters_dir.glob("*.py"):
@@ -1020,7 +1033,9 @@ async def test_status_mapping_and_resolution(adapter_config, adapter_fixtures, a
 
 
 @pytest.mark.asyncio
-async def test_polymarket_open_near_certain_not_resolved(adapter_config, adapter_fixtures, adapter_client):
+async def test_polymarket_open_near_certain_not_resolved(
+    adapter_config, adapter_fixtures, adapter_client
+):
     """Verify Polymarket open market with price >0.999 is NOT marked resolved.
 
     Polymarket can have open markets trading near certainty (>0.999) that are not
@@ -1082,14 +1097,45 @@ async def test_limitless_expired_not_resolved_and_closed_param(adapter_config, a
         async for _ in adapter_client.list_markets(closed=True, limit=1):
             pass
 
-    # Test closed=False works (with mock)
+    # Test expired-but-not-resolved market
+    # Create a market payload with expiration in the past but not finalized
+    from prediction_markets_api.models.base import MarketStatus
+
+    expired_market_payload = {
+        "slug": "test-expired-market",
+        "title": "Test Expired Market",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "expirationDate": "2026-10-15T00:00:00Z",  # Past expiration
+        "resolvedAt": None,  # Not yet resolved/finalized
+        "winningOutcomeIndex": None,
+        "outcomes": ["YES", "NO"],
+        "initialProb": 500000,  # 0.5 in 6-decimal units
+        "type": "BINARY",
+    }
+
     with respx.mock:
         # Limitless wraps in {"data": [...]}
-        respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json={"data": []}))
-        count = 0
-        async for _ in adapter_client.list_markets(closed=False, limit=1):
-            count += 1
-        # Empty response is OK, just verifying no exception
+        respx.get(url__regex=r".*/markets.*").mock(
+            return_value=Response(200, json={"data": [expired_market_payload]})
+        )
+
+        markets = []
+        async for market in adapter_client.list_markets(closed=False, limit=1):
+            markets.append(market)
+
+        assert len(markets) == 1, "Should parse expired market"
+        market = markets[0]
+
+        # Verify it's NOT marked resolved despite being expired
+        assert not market.resolved, (
+            f"Expired market {market.id} without finalization must not be marked resolved"
+        )
+        assert market.status != MarketStatus.RESOLVED, (
+            f"Expired market {market.id} must not have status=RESOLVED"
+        )
+        assert market.winning_outcome is None, (
+            f"Expired market {market.id} without resolution must have winning_outcome=None"
+        )
 
     # Test closed=None works (with mock)
     with respx.mock:
@@ -1129,7 +1175,9 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
         else:
             mock_data = []
 
-        route = respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=mock_data))
+        route = respx.get(url__regex=r".*/markets.*").mock(
+            return_value=Response(200, json=mock_data)
+        )
 
         # Test closed=False
         route.calls.clear()
@@ -1285,7 +1333,9 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
                 await adapter_client.get_market("NONEXISTENT_TICKER")
         else:
             # Polymarket/Limitless: 404 directly
-            respx.get(url__regex=r".*").mock(return_value=Response(404, json={"error": "not found"}))
+            respx.get(url__regex=r".*").mock(
+                return_value=Response(404, json={"error": "not found"})
+            )
             with pytest.raises(NotFoundError):
                 await adapter_client.get_order_book("NONEXISTENT_MARKET_12345")
 
