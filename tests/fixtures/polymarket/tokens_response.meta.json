@@ -1,0 +1,11 @@
+{
+  "recorded_at": "2026-10-11T05:46:28.353995+00:00",
+  "request": {
+    "method": "GET",
+    "url": "https://data-api.polymarket.com/v2/tokens",
+    "params": {
+      "token_ids": "54533043819946592547517511176940999955633860128497669742211153063842200957669,32338220190071351435772801779725302244575775216413325951443816017994629993401"
+    }
+  },
+  "description": "Response from Polymarket Data API v2 /tokens endpoint (added Oct 7, 2026). Shows batch token data retrieval."
+}

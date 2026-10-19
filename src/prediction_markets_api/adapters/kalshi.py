@@ -17,9 +17,16 @@ import httpx
 from dateutil import parser
 
 from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.exceptions import (
+    NoLiquidityError,
+    NotFoundError,
+    RateLimitError,
+    VenueAPIError,
+)
 from prediction_markets_api.models.base import (
     Currency,
     Market,
+    MarketStatus,
     OrderBook,
     OrderLevel,
     OrderSide,
@@ -72,73 +79,144 @@ class KalshiClient(BaseClient):
         venue_params: dict[str, Any] | None = None,
         *,
         include_multivariate: bool = False,
+        series_ticker: str | None = None,
+        category: str | None = None,
     ) -> AsyncIterator[Market]:
         """List markets using Kalshi API cursor pagination.
 
         Args:
-            closed: Filter by closed status (None = all)
+            closed: Filter by closed status:
+                - False: open markets only (status=open)
+                - True: closed and settled markets (status=closed + status=settled, two requests)
+                - None: all markets except unopened (no status filter, drops initialized client-side)
             limit: Maximum total markets to return (None = unlimited)
             page_size: Results per API request (max 200)
             venue_params: Venue-specific parameters as a dict (optional, unused by Kalshi)
             include_multivariate: Include multivariate combo markets (KXMVE*). Default False
                 to exclude them via server-side mve_filter=exclude, as they flood listings
                 and often 404 on direct GET. Kalshi-specific keyword-only parameter.
+            series_ticker: Filter by series ticker (keyword-only)
+            category: Filter by category (keyword-only)
 
         Yields:
-            Market objects (up to `limit` total)
+            Market objects (up to `limit` total, applied AFTER client-side filtering for closed=None)
 
         Raises:
             ValueError: If API returns invalid data
+
+        Note:
+            Kalshi accepts only ONE status per request. Valid filter statuses: unopened, open, closed, settled.
+            Response statuses differ from filter: open->active, closed->determined, settled->finalized, unopened->initialized.
+            For closed=True, two sequential requests are made (closed + settled) and results are combined.
         """
-        url = f"{self.API_BASE}/markets"
-        params: dict[str, Any] = {"limit": min(page_size, 200)}
+        # Determine which statuses to query
+        statuses: list[str] = []
+        if closed is False:
+            statuses = ["open"]
+        elif closed is True:
+            statuses = ["closed", "settled"]
+        # closed=None: no status filter, statuses stays empty
 
-        if closed is not None:
-            # Kalshi uses status filter: "active", "closed", "settled"
-            params["status"] = "closed" if closed else "active"
-
-        # Exclude multivariate combo markets by default (server-side filter)
-        if not include_multivariate:
-            params["mve_filter"] = "exclude"
-
-        cursor: str | None = None
         yielded = 0
+        seen_ids: set[str] = set()  # Deduplicate across status requests
 
-        while True:
-            if cursor:
-                params["cursor"] = cursor
+        for status in statuses if statuses else [None]:
+            # Build params for this status query
+            url = f"{self.API_BASE}/markets"
+            params: dict[str, Any] = {"limit": min(page_size, 200)}
 
-            try:
-                response = await self._http_client.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch markets: {e}") from e
+            if status is not None:
+                params["status"] = status
 
-            markets = data.get("markets", [])
-            if not markets:
-                break
+            # Exclude multivariate combo markets by default (server-side filter)
+            if not include_multivariate:
+                params["mve_filter"] = "exclude"
 
-            for market_data in markets:
+            if series_ticker is not None:
+                params["series_ticker"] = series_ticker
+
+            if category is not None:
+                params["category"] = category
+
+            cursor: str | None = None
+
+            while True:
+                # Short-circuit: if we've already yielded enough, stop
                 if limit is not None and yielded >= limit:
                     return
 
+                if cursor:
+                    params["cursor"] = cursor
+
                 try:
-                    market = self._parse_market(market_data)
-                    yield market
-                    yielded += 1
-                except (KeyError, ValueError, TypeError) as e:
-                    # Log and skip markets we can't parse
-                    import logging
+                    response = await self._http_client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 429:
+                        raise RateLimitError(
+                            "Rate limit exceeded",
+                            venue="kalshi",
+                            url=str(e.request.url),
+                        ) from e
+                    else:
+                        raise VenueAPIError(
+                            f"Failed to fetch markets: {e}",
+                            status_code=e.response.status_code,
+                            venue="kalshi",
+                            url=str(e.request.url),
+                        ) from e
+                except httpx.HTTPError as e:
+                    raise VenueAPIError(
+                        f"HTTP error fetching markets: {e}",
+                        venue="kalshi",
+                        url=url,
+                    ) from e
+                except ValueError as e:
+                    raise VenueAPIError(
+                        f"Invalid JSON response: {e}",
+                        venue="kalshi",
+                        url=url,
+                    ) from e
 
-                    logging.warning(
-                        f"Skipping market due to parse error: {market_data.get('ticker', 'unknown')} - {e}"
-                    )
-                    continue
+                markets = data.get("markets", [])
+                if not markets:
+                    break
 
-            cursor = data.get("cursor")
-            if not cursor:
-                break
+                for market_data in markets:
+                    try:
+                        market = self._parse_market(market_data)
+
+                        # Deduplicate: skip if we've seen this market ID
+                        if market.id in seen_ids:
+                            continue
+                        seen_ids.add(market.id)
+
+                        # For closed=None, filter out initialized (unopened) markets client-side
+                        if (
+                            closed is None
+                            and market.venue_status
+                            and market.venue_status.lower() == "initialized"
+                        ):
+                            continue
+
+                        # Apply limit AFTER filtering
+                        if limit is not None and yielded >= limit:
+                            return
+
+                        yield market
+                        yielded += 1
+                    except (KeyError, ValueError, TypeError) as e:
+                        import logging
+
+                        logging.warning(
+                            f"Skipping market due to parse error: {market_data.get('ticker', 'unknown')} - {e}"
+                        )
+                        continue
+
+                cursor = data.get("cursor")
+                if not cursor:
+                    break
 
     async def get_market(self, market_id: str) -> Market:
         """Get a specific market by ticker.
@@ -158,12 +236,46 @@ class KalshiClient(BaseClient):
             response = await self._http_client.get(url)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch market {market_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Market not found: {market_id}",
+                    resource_type="market",
+                    resource_id=market_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch market {market_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching market {market_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for market {market_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
 
         market_data = data.get("market")
         if not market_data:
-            raise ValueError(f"Market {market_id} not found")
+            raise NotFoundError(
+                f"Market not found: {market_id}",
+                resource_type="market",
+                resource_id=market_id,
+            )
 
         return self._parse_market(market_data)
 
@@ -189,8 +301,38 @@ class KalshiClient(BaseClient):
             response = await self._http_client.get(url)
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise ValueError(f"Failed to fetch order book for {outcome_id}: {e}") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise NotFoundError(
+                    f"Order book not found for market: {outcome_id}",
+                    resource_type="market",
+                    resource_id=outcome_id,
+                ) from e
+            elif e.response.status_code == 429:
+                raise RateLimitError(
+                    "Rate limit exceeded",
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+            else:
+                raise VenueAPIError(
+                    f"Failed to fetch order book for {outcome_id}: {e}",
+                    status_code=e.response.status_code,
+                    venue="kalshi",
+                    url=str(e.request.url),
+                ) from e
+        except httpx.HTTPError as e:
+            raise VenueAPIError(
+                f"HTTP error fetching order book for {outcome_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
+        except ValueError as e:
+            raise VenueAPIError(
+                f"Invalid JSON response for order book {outcome_id}: {e}",
+                venue="kalshi",
+                url=url,
+            ) from e
 
         order_book = self._parse_order_book(outcome_id, data)
         order_book.validate_not_crossed()
@@ -223,14 +365,36 @@ class KalshiClient(BaseClient):
         if side == OrderSide.BUY:
             # User wants to BUY YES -> needs best ask
             if not order_book.asks:
-                raise ValueError(f"No liquidity to buy (no asks) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to buy (no asks) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="BUY",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.asks[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
         else:
             # User wants to SELL YES -> needs best bid
             if not order_book.bids:
-                raise ValueError(f"No liquidity to sell (no bids) for {outcome_id}")
+                # Empty book: check if market exists
+                try:
+                    await self.get_market(outcome_id)
+                    # Market exists but no liquidity
+                    raise NoLiquidityError(
+                        f"No liquidity to sell (no bids) for {outcome_id}",
+                        market_id=outcome_id,
+                        side="SELL",
+                    )
+                except NotFoundError:
+                    # Market doesn't exist
+                    raise
             best_level = order_book.bids[0]
             best_price = best_level.price
             raw_price = best_level.raw_price
@@ -245,30 +409,124 @@ class KalshiClient(BaseClient):
             currency=Currency.USD,
         )
 
-    async def get_trades(
+    async def get_trades(  # type: ignore[override]
         self,
         outcome_id: str,
         limit: int = 100,
-        **kwargs: object,
+        *,
+        page_size: int = 100,
+        min_ts: int | None = None,
+        max_ts: int | None = None,
     ) -> AsyncIterator[Trade]:
-        """Get historical trades for an outcome.
+        """Get historical trades for an outcome (bounded).
 
         Args:
             outcome_id: Kalshi ticker
-            limit: Results per page
-            **kwargs: Additional filters (min_ts, max_ts, etc.)
+            limit: Maximum total trades to return (default 100)
+            page_size: Results per API request (default 100, max 200)
+            min_ts: Filter trades after this Unix timestamp (milliseconds)
+            max_ts: Filter trades before this Unix timestamp (milliseconds)
 
         Yields:
-            Trade objects
+            Trade objects (up to `limit` total)
         """
-        url = f"{self.API_BASE}/markets/{outcome_id}/trades"
+        url = f"{self.API_BASE}/markets/trades"
+
+        yielded = 0
+        cursor: str | None = None
+
+        while yielded < limit:
+            # Request min(remaining, page_size) items
+            request_limit = min(limit - yielded, page_size, 200)
+
+            params: dict[str, Any] = {
+                "ticker": outcome_id,
+                "limit": request_limit,
+            }
+
+            if min_ts is not None:
+                params["min_ts"] = min_ts
+            if max_ts is not None:
+                params["max_ts"] = max_ts
+            if cursor:
+                params["cursor"] = cursor
+
+            try:
+                response = await self._http_client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
+
+            trades = data.get("trades", [])
+            if not trades:
+                break
+
+            for trade_data in trades:
+                if yielded >= limit:
+                    return
+                try:
+                    trade = self._parse_trade(outcome_id, trade_data)
+                    yield trade
+                    yielded += 1
+                except (KeyError, ValueError):
+                    continue
+
+            cursor = data.get("cursor")
+            if not cursor:
+                break
+
+    async def iter_trades(
+        self,
+        outcome_id: str,
+        *,
+        min_ts: int | None = None,
+        max_ts: int | None = None,
+    ) -> AsyncIterator[Trade]:
+        """Iterate all historical trades for an outcome (unbounded).
+
+        Args:
+            outcome_id: Kalshi ticker
+            min_ts: Filter trades after this Unix timestamp (milliseconds)
+            max_ts: Filter trades before this Unix timestamp (milliseconds)
+
+        Yields:
+            Trade objects (all available)
+        """
+        url = f"{self.API_BASE}/markets/trades"
         params: dict[str, Any] = {
-            "limit": limit,
+            "ticker": outcome_id,
+            "limit": 200,  # Max per request
         }
 
-        for key, value in kwargs.items():
-            if value is not None:
-                params[key] = value
+        if min_ts is not None:
+            params["min_ts"] = min_ts
+        if max_ts is not None:
+            params["max_ts"] = max_ts
 
         cursor: str | None = None
 
@@ -280,8 +538,32 @@ class KalshiClient(BaseClient):
                 response = await self._http_client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as e:
-                raise ValueError(f"Failed to fetch trades for {outcome_id}: {e}") from e
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+                else:
+                    raise VenueAPIError(
+                        f"Failed to fetch trades for {outcome_id}: {e}",
+                        status_code=e.response.status_code,
+                        venue="kalshi",
+                        url=str(e.request.url),
+                    ) from e
+            except httpx.HTTPError as e:
+                raise VenueAPIError(
+                    f"HTTP error fetching trades for {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
+            except ValueError as e:
+                raise VenueAPIError(
+                    f"Invalid JSON response for trades {outcome_id}: {e}",
+                    venue="kalshi",
+                    url=url,
+                ) from e
 
             trades = data.get("trades", [])
             if not trades:
@@ -383,8 +665,35 @@ class KalshiClient(BaseClient):
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
 
-        status = data.get("status", "")
-        resolved = status in ("closed", "settled")
+        # Kalshi status mapping (response values differ from filter names):
+        # Filter: open -> Response: active
+        # Filter: closed -> Response: determined
+        # Filter: settled -> Response: finalized
+        # Filter: unopened -> Response: initialized
+        venue_status = data.get("status", "")
+
+        # Map to normalized status
+        status_map = {
+            "active": MarketStatus.OPEN,
+            "initialized": MarketStatus.CLOSED,  # Not yet opened
+            "determined": MarketStatus.RESOLVED,  # Outcome determined but not yet paid out
+            "finalized": MarketStatus.RESOLVED,  # Fully settled and paid out
+        }
+
+        status = status_map.get(venue_status.lower())
+        if status is None and venue_status:
+            import logging
+
+            logging.warning(
+                f"Unknown Kalshi market status '{venue_status}' for market {data.get('ticker')}. "
+                "This status will not be normalized."
+            )
+
+        # Market is resolved if outcome is known (determined or finalized)
+        resolved = venue_status.lower() in ("determined", "finalized")
+
+        # Check if there's a result field indicating the winning outcome
+        result = data.get("result")
 
         # Volume in USD (already in dollars in new API)
         volume = None
@@ -474,6 +783,15 @@ class KalshiClient(BaseClient):
             )
         )
 
+        # Determine winning outcome if result is provided
+        winning_outcome_name = None
+        if result and resolved:
+            for outcome in outcomes:
+                # Kalshi result is "yes" or "no"
+                if result.lower() == outcome.name.lower():
+                    winning_outcome_name = outcome.name
+                    break
+
         return Market(
             id=ticker,
             venue="kalshi",
@@ -483,6 +801,9 @@ class KalshiClient(BaseClient):
             created_at=created_at,
             end_date=end_date,
             resolved=resolved,
+            venue_status=venue_status,
+            status=status,
+            winning_outcome=winning_outcome_name,
             volume=volume,
             open_interest=open_interest,
             best_bid_size=best_bid_size,

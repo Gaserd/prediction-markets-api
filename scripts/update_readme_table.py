@@ -25,8 +25,7 @@ def update_readme() -> bool:
 
     # Find the venue section using a pattern that matches just the table
     venue_section_pattern = re.compile(
-        r"(## Supported Venues\n\n.*?\n\n\| Venue.*?\| BetDEX.*?\|)\n",
-        re.DOTALL | re.MULTILINE
+        r"(## Supported Venues\n\n.*?\n\n\| Venue.*?\| BetDEX.*?\|)\n", re.DOTALL | re.MULTILINE
     )
 
     # Check if the section exists
