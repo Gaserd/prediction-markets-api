@@ -30,6 +30,7 @@ from prediction_markets_api.models.base import (
     Price,
     Trade,
 )
+from prediction_markets_api.utils import parse_timestamp
 
 
 class LimitlessClient(BaseClient):
@@ -353,7 +354,8 @@ class LimitlessClient(BaseClient):
         end_date_ts = data.get("expirationTimestamp")
         if end_date_ts:
             try:
-                end_date = datetime.fromtimestamp(end_date_ts / 1000, tz=timezone.utc)
+                # Limitless timestamps are in milliseconds
+                end_date = parse_timestamp(end_date_ts, is_milliseconds=True)
             except (ValueError, TypeError):
                 pass
 

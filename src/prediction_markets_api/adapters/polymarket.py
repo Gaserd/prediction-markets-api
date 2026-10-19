@@ -21,6 +21,7 @@ from prediction_markets_api.models.base import (
     Price,
     Trade,
 )
+from prediction_markets_api.utils import parse_timestamp
 
 
 class PolymarketClient(BaseClient):
@@ -632,7 +633,8 @@ class PolymarketClient(BaseClient):
         timestamp_str = data.get("timestamp")
         if timestamp_str:
             try:
-                timestamp = datetime.fromtimestamp(float(timestamp_str), tz=timezone.utc)
+                # Polymarket CLOB timestamps are in milliseconds
+                timestamp = parse_timestamp(timestamp_str, is_milliseconds=True)
             except (ValueError, TypeError):
                 timestamp = datetime.now(timezone.utc)
         else:
@@ -723,7 +725,8 @@ class PolymarketClient(BaseClient):
         if timestamp_val:
             try:
                 if isinstance(timestamp_val, (int, float)):
-                    timestamp = datetime.fromtimestamp(timestamp_val, tz=timezone.utc)
+                    # Polymarket trade timestamps are in seconds
+                    timestamp = parse_timestamp(timestamp_val, is_milliseconds=False)
                 else:
                     timestamp = parser.isoparse(str(timestamp_val))
                     if timestamp.tzinfo is None:
