@@ -374,6 +374,7 @@ class LimitlessClient(BaseClient):
         status = status_map.get(venue_status.lower())
         if status is None and venue_status:
             import logging
+
             logging.warning(
                 f"Unknown Limitless market status '{venue_status}' for market {slug}. "
                 "This status will not be normalized."

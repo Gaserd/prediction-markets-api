@@ -163,7 +163,11 @@ class KalshiClient(BaseClient):
                         seen_ids.add(market.id)
 
                         # For closed=None, filter out initialized (unopened) markets client-side
-                        if closed is None and market.venue_status and market.venue_status.lower() == "initialized":
+                        if (
+                            closed is None
+                            and market.venue_status
+                            and market.venue_status.lower() == "initialized"
+                        ):
                             continue
 
                         # Apply limit AFTER filtering
@@ -443,12 +447,13 @@ class KalshiClient(BaseClient):
             "active": MarketStatus.OPEN,
             "initialized": MarketStatus.CLOSED,  # Not yet opened
             "determined": MarketStatus.RESOLVED,  # Outcome determined but not yet paid out
-            "finalized": MarketStatus.RESOLVED,   # Fully settled and paid out
+            "finalized": MarketStatus.RESOLVED,  # Fully settled and paid out
         }
 
         status = status_map.get(venue_status.lower())
         if status is None and venue_status:
             import logging
+
             logging.warning(
                 f"Unknown Kalshi market status '{venue_status}' for market {data.get('ticker')}. "
                 "This status will not be normalized."

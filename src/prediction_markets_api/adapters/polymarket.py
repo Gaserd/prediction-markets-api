@@ -438,6 +438,7 @@ class PolymarketClient(BaseClient):
         try:
             if isinstance(outcome_prices_str, str):
                 import json
+
                 outcome_prices_list = json.loads(outcome_prices_str)
             else:
                 outcome_prices_list = outcome_prices_str
@@ -540,7 +541,11 @@ class PolymarketClient(BaseClient):
             )
 
         # Mark winning outcome if resolved
-        if is_resolved and winning_outcome_index is not None and winning_outcome_index < len(outcomes):
+        if (
+            is_resolved
+            and winning_outcome_index is not None
+            and winning_outcome_index < len(outcomes)
+        ):
             data["winning_outcome"] = outcomes[winning_outcome_index].name
 
         return Market(

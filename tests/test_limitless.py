@@ -306,7 +306,9 @@ async def test_status_mapping_from_fixtures():
             market = client._parse_market(market_data)
 
             # Check venue_status
-            assert market.venue_status == status_name, f"Expected venue_status={status_name}, got {market.venue_status}"
+            assert market.venue_status == status_name, (
+                f"Expected venue_status={status_name}, got {market.venue_status}"
+            )
 
             # Check normalized status
             expected_status = expected_data["expected_normalized_status"]
@@ -320,7 +322,9 @@ async def test_status_mapping_from_fixtures():
             # Check resolved flag
             assert market.resolved == expected_data["expected_resolved"]
 
-            print(f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}")
+            print(
+                f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}"
+            )
 
 
 @pytest.mark.asyncio
@@ -340,7 +344,10 @@ async def test_unknown_status_logs_warning(caplog):
             market = client._parse_market(market_data)
 
         # Should have logged a warning
-        assert any("Unknown Limitless market status 'UNKNOWN_STATUS'" in record.message for record in caplog.records)
+        assert any(
+            "Unknown Limitless market status 'UNKNOWN_STATUS'" in record.message
+            for record in caplog.records
+        )
 
         # Status should be None
         assert market.status is None

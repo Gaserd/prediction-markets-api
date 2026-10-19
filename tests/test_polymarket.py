@@ -505,7 +505,9 @@ async def test_status_mapping_from_fixtures():
             market = client._parse_market(market_data)
 
             # Check venue_status
-            assert market.venue_status == status_name, f"Expected venue_status={status_name}, got {market.venue_status}"
+            assert market.venue_status == status_name, (
+                f"Expected venue_status={status_name}, got {market.venue_status}"
+            )
 
             # Check normalized status
             expected_status = expected_data["expected_normalized_status"]
@@ -521,10 +523,16 @@ async def test_status_mapping_from_fixtures():
 
             # Check winning outcome if expected
             if expected_data.get("has_winning_outcome"):
-                assert "winning_outcome" in market.raw_data, f"Expected winning_outcome for {status_name}"
-                assert market.raw_data["winning_outcome"] in ["Yes", "No"], "Winning outcome should be Yes or No"
+                assert "winning_outcome" in market.raw_data, (
+                    f"Expected winning_outcome for {status_name}"
+                )
+                assert market.raw_data["winning_outcome"] in ["Yes", "No"], (
+                    "Winning outcome should be Yes or No"
+                )
 
-            print(f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}")
+            print(
+                f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}"
+            )
 
 
 @pytest.mark.asyncio

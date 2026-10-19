@@ -376,13 +376,13 @@ async def test_list_markets_closed_true_two_requests(respx_mock):
     }
 
     # Mock both requests
-    respx_mock.route(
-        url__regex=r".*status=closed.*"
-    ).mock(return_value=httpx.Response(200, json=closed_response))
+    respx_mock.route(url__regex=r".*status=closed.*").mock(
+        return_value=httpx.Response(200, json=closed_response)
+    )
 
-    respx_mock.route(
-        url__regex=r".*status=settled.*"
-    ).mock(return_value=httpx.Response(200, json=settled_response))
+    respx_mock.route(url__regex=r".*status=settled.*").mock(
+        return_value=httpx.Response(200, json=settled_response)
+    )
 
     async with KalshiClient() as client:
         markets = []
@@ -419,9 +419,9 @@ async def test_list_markets_closed_true_limit_short_circuit(respx_mock):
     }
 
     # Mock closed request
-    respx_mock.route(
-        url__regex=r".*status=closed.*"
-    ).mock(return_value=httpx.Response(200, json=closed_response))
+    respx_mock.route(url__regex=r".*status=closed.*").mock(
+        return_value=httpx.Response(200, json=closed_response)
+    )
 
     async with KalshiClient() as client:
         markets = []
@@ -473,13 +473,13 @@ async def test_list_markets_deduplicates_across_requests(respx_mock):
         "cursor": None,
     }
 
-    respx_mock.route(
-        url__regex=r".*status=closed.*"
-    ).mock(return_value=httpx.Response(200, json=closed_response))
+    respx_mock.route(url__regex=r".*status=closed.*").mock(
+        return_value=httpx.Response(200, json=closed_response)
+    )
 
-    respx_mock.route(
-        url__regex=r".*status=settled.*"
-    ).mock(return_value=httpx.Response(200, json=settled_response))
+    respx_mock.route(url__regex=r".*status=settled.*").mock(
+        return_value=httpx.Response(200, json=settled_response)
+    )
 
     async with KalshiClient() as client:
         markets = []
@@ -518,7 +518,9 @@ async def test_status_mapping_from_fixtures():
             market = client._parse_market(market_data)
 
             # Check venue_status
-            assert market.venue_status == status_name, f"Expected venue_status={status_name}, got {market.venue_status}"
+            assert market.venue_status == status_name, (
+                f"Expected venue_status={status_name}, got {market.venue_status}"
+            )
 
             # Check normalized status
             expected_status = expected_data["expected_normalized_status"]
@@ -532,7 +534,9 @@ async def test_status_mapping_from_fixtures():
             # Check resolved flag
             assert market.resolved == expected_data["expected_resolved"]
 
-            print(f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}")
+            print(
+                f"✓ {status_name}: venue_status={market.venue_status}, status={market.status}, resolved={market.resolved}"
+            )
 
 
 @pytest.mark.asyncio
@@ -551,7 +555,10 @@ async def test_unknown_status_logs_warning(caplog):
             market = client._parse_market(market_data)
 
         # Should have logged a warning
-        assert any("Unknown Kalshi market status 'UNKNOWN_STATUS'" in record.message for record in caplog.records)
+        assert any(
+            "Unknown Kalshi market status 'UNKNOWN_STATUS'" in record.message
+            for record in caplog.records
+        )
 
         # Status should be None (not normalized)
         assert market.status is None
@@ -627,10 +634,21 @@ async def test_closed_none_applies_limit_after_filtering(respx_mock):
     # Return more markets than the limit, including some initialized
     mock_response = {
         "markets": [
-            {"ticker": f"INIT-{i:02d}", "title": f"Init {i}", "open_time": "2026-01-01T00:00:00Z", "status": "initialized"}
+            {
+                "ticker": f"INIT-{i:02d}",
+                "title": f"Init {i}",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "initialized",
+            }
             for i in range(5)
-        ] + [
-            {"ticker": f"ACTIVE-{i:02d}", "title": f"Active {i}", "open_time": "2026-01-01T00:00:00Z", "status": "active"}
+        ]
+        + [
+            {
+                "ticker": f"ACTIVE-{i:02d}",
+                "title": f"Active {i}",
+                "open_time": "2026-01-01T00:00:00Z",
+                "status": "active",
+            }
             for i in range(5)
         ],
         "cursor": None,
