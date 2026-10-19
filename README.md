@@ -194,7 +194,8 @@ asyncio.run(main())
 - `get_market(market_id)` - Get single market by ID
 - `get_order_book(outcome_id)` - Get sorted, validated order book
 - `get_price(outcome_id, side)` - Get best executable price
-- `get_trades(outcome_id, limit)` - Historical trades iterator
+- `get_trades(outcome_id, limit, page_size)` - Historical trades iterator (up to `limit` total, default 100)
+- `iter_trades(outcome_id)` - Iterate all historical trades (unbounded)
 
 > **Note:** Trading functionality with `place_order()` is planned for version 1.0. Version 0.9 is read-only.
 
@@ -224,6 +225,7 @@ The library provides a consistent exception hierarchy:
 from prediction_markets_api import (
     PredictionMarketsError,  # Base exception
     NotFoundError,  # Market/outcome/token not found
+    NoLiquidityError,  # Empty order book for existing market
     VenueAPIError,  # HTTP errors, invalid responses
     RateLimitError,  # HTTP 429 rate limit
 )
@@ -235,6 +237,10 @@ from prediction_markets_api import (
 - **`NotFoundError`**: Resource not found (markets, outcomes, tokens)
   - Attributes: `resource_type`, `resource_id`
   - Raised on HTTP 404 or empty results
+- **`NoLiquidityError`**: No liquidity available (empty order book for an existing market)
+  - Attributes: `market_id`, `side` (BUY/SELL)
+  - Raised by `get_price()` when the order book has no bids/asks on the requested side
+  - Different from `NotFoundError` (market doesn't exist) vs. market exists but has no liquidity
 - **`VenueAPIError`**: HTTP errors, timeouts, invalid JSON responses
   - Attributes: `status_code`, `venue`, `url`
   - Wraps all `httpx` errors for consistent handling

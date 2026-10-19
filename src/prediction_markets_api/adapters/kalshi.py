@@ -409,7 +409,7 @@ class KalshiClient(BaseClient):
             currency=Currency.USD,
         )
 
-    async def get_trades(
+    async def get_trades(  # type: ignore[override]
         self,
         outcome_id: str,
         limit: int = 100,
@@ -431,14 +431,14 @@ class KalshiClient(BaseClient):
             Trade objects (up to `limit` total)
         """
         url = f"{self.API_BASE}/markets/trades"
-        
+
         yielded = 0
         cursor: str | None = None
 
         while yielded < limit:
             # Request min(remaining, page_size) items
             request_limit = min(limit - yielded, page_size, 200)
-            
+
             params: dict[str, Any] = {
                 "ticker": outcome_id,
                 "limit": request_limit,

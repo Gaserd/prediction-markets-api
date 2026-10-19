@@ -439,7 +439,7 @@ class PolymarketClient(BaseClient):
             currency=Currency.USDC,
         )
 
-    async def get_trades(
+    async def get_trades(  # type: ignore[override]
         self,
         outcome_id: str,
         limit: int = 100,
@@ -463,14 +463,14 @@ class PolymarketClient(BaseClient):
             Trade objects (up to `limit` total)
         """
         url = f"{self.DATA_API_BASE}/trades"
-        
+
         yielded = 0
         cursor: str | None = None
 
         while yielded < limit:
             # Request min(remaining, page_size) items
             request_limit = min(limit - yielded, page_size, 1000)
-            
+
             params: dict[str, Any] = {
                 "asset_id": outcome_id,
                 "limit": request_limit,

@@ -672,16 +672,25 @@ async def test_closed_none_applies_limit_after_filtering(respx_mock):
 
 @pytest.mark.asyncio
 async def test_get_price_not_found(respx_mock):
-    """Test get_price with 404 error."""
+    """Test get_price with bogus ticker: empty book (200) + market 404."""
     from prediction_markets_api.exceptions import NotFoundError
 
-    respx_mock.get(re.compile(r".*/markets/.*/orderbook")).mock(
+    # First call: orderbook returns 200 with empty book
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets/BOGUS/orderbook").mock(
+        return_value=httpx.Response(
+            200,
+            json={"orderbook_fp": {"no_dollars": [], "yes_dollars": []}},
+        )
+    )
+
+    # Second call: market check returns 404
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets/BOGUS").mock(
         return_value=httpx.Response(404, json={"error": "Not found"})
     )
 
     async with KalshiClient() as client:
-        with pytest.raises(NotFoundError, match="not found"):
-            await client.get_price("NONEXISTENT", OrderSide.BUY)
+        with pytest.raises(NotFoundError):
+            await client.get_price("BOGUS", OrderSide.BUY)
 
 
 @pytest.mark.asyncio
@@ -711,3 +720,77 @@ async def test_rate_limit_error(respx_mock):
     async with KalshiClient() as client:
         with pytest.raises(RateLimitError, match="Rate limit"):
             await client.get_market("SOME-MARKET")
+
+
+@pytest.mark.asyncio
+async def test_get_trades_limit_behavior(respx_mock):
+    """Test get_trades with limit=5 makes exactly 1 request and returns exactly 5 trades."""
+    ticker = "TEST-TICKER"
+
+    # Mock infinite cursor - always return 10 trades with a cursor
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets/trades").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "trades": [
+                    {
+                        "count": 1,
+                        "created_time": "2024-01-01T00:00:00Z",
+                        "no_count": 1,
+                        "yes_count": 0,
+                        "taker_side": "yes",
+                    }
+                    for _ in range(10)
+                ],
+                "cursor": "next_page",  # Always has next page
+            },
+        )
+    )
+
+    async with KalshiClient() as client:
+        trades = [t async for t in client.get_trades(ticker, limit=5)]
+
+    # Should return exactly 5 trades
+    assert len(trades) == 5
+
+    # Should make exactly 1 request (route called once)
+    assert respx_mock.calls.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_get_price_no_liquidity(respx_mock):
+    """Test get_price with empty book but existing market raises NoLiquidityError."""
+    from prediction_markets_api.exceptions import NoLiquidityError
+
+    # First call: orderbook returns 200 with empty book
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets/ILLIQUID/orderbook").mock(
+        return_value=httpx.Response(
+            200,
+            json={"orderbook_fp": {"no_dollars": [], "yes_dollars": []}},
+        )
+    )
+
+    # Second call: market check returns 200 (market exists)
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets/ILLIQUID").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "market": {
+                    "ticker": "ILLIQUID",
+                    "title": "Illiquid Market",
+                    "status": "open",
+                    "yes_ask": None,
+                    "yes_bid": None,
+                    "no_ask": None,
+                    "no_bid": None,
+                    "expiration_time": "2024-12-31T23:59:59Z",
+                    "close_time": "2024-12-31T23:59:59Z",
+                    "result": None,
+                }
+            },
+        )
+    )
+
+    async with KalshiClient() as client:
+        with pytest.raises(NoLiquidityError, match="No liquidity to buy"):
+            await client.get_price("ILLIQUID", OrderSide.BUY)

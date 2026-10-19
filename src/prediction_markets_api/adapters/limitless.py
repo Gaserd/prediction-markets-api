@@ -347,7 +347,7 @@ class LimitlessClient(BaseClient):
             currency=Currency.USDC,
         )
 
-    async def get_trades(
+    async def get_trades(  # type: ignore[override]
         self,
         outcome_id: str,
         limit: int = 100,
