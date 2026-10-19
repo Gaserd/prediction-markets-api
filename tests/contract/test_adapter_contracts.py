@@ -1159,10 +1159,8 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
     Contract:
     - closed=False/True/None must send correct venue-specific filter parameters
     - closed=None sends no status filter
+    - Limitless: closed=False/None must not send unsupported status param
     """
-    if adapter_config.name == "limitless":
-        # Limitless raises for closed=True, tested separately
-        pytest.skip("Limitless closed=True raises NotImplementedError, tested in contract 15")
 
     with respx.mock:
         # Mock with proper response format
@@ -1197,23 +1195,27 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             # Kalshi uses status filter: closed=False -> status=open
             assert params.get("status") == "open", "Kalshi closed=False must send status=open"
 
-        # Test closed=True
-        route.calls.clear()
-        count = 0
-        async for _ in adapter_client.list_markets(closed=True, limit=1):
-            count += 1
-            if count >= 1:
-                break
+        # Test closed=True (Limitless raises NotImplementedError, tested separately)
+        if adapter_config.name != "limitless":
+            route.calls.clear()
+            count = 0
+            async for _ in adapter_client.list_markets(closed=True, limit=1):
+                count += 1
+                if count >= 1:
+                    break
 
-        assert len(route.calls) > 0, "Expected at least one request for closed=True"
-        request = route.calls[0].request
-        params = dict(request.url.params)
+            assert len(route.calls) > 0, "Expected at least one request for closed=True"
+            request = route.calls[0].request
+            params = dict(request.url.params)
 
-        if adapter_config.name == "polymarket":
-            assert params.get("closed") == "true", "Polymarket closed=True must send closed=true"
-        elif adapter_config.name == "kalshi":
-            # Kalshi closed=True -> status=closed (includes determined, finalized, etc.)
-            assert params.get("status") == "closed", "Kalshi closed=True must send status=closed"
+            if adapter_config.name == "polymarket":
+                assert params.get("closed") == "true", "Polymarket closed=True must send closed=true"
+            elif adapter_config.name == "kalshi":
+                # Kalshi closed=True -> makes 2 requests (status=closed, status=settled)
+                # Check first request has one of these
+                assert params.get("status") in ["closed", "settled"], (
+                    f"Kalshi closed=True must send status=closed or status=settled, got {params.get('status')}"
+                )
 
         # Test closed=None (no filter)
         route.calls.clear()
@@ -1232,6 +1234,10 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             assert "closed" not in params, "Polymarket closed=None must not send closed param"
         elif adapter_config.name == "kalshi":
             assert "status" not in params, "Kalshi closed=None must not send status param"
+        elif adapter_config.name == "limitless":
+            # Limitless doesn't have status/closed filter params
+            assert "status" not in params, "Limitless closed=None must not send status param"
+            assert "closed" not in params, "Limitless closed=None must not send closed param"
 
 
 # =============================================================================
