@@ -25,9 +25,9 @@ async def test_list_markets(respx_mock):
     """Test listing markets from Kalshi."""
     # Load and mock the API response
     markets_data = load_fixture("markets_response.json")
-    respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=markets_data)
+    )
 
     # Fetch markets
     async with KalshiClient() as client:
@@ -58,9 +58,9 @@ async def test_list_markets_respects_limit(respx_mock):
     while len(markets_data["markets"]) < 5:
         markets_data["markets"].append(markets_data["markets"][0].copy())
 
-    respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+    respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=markets_data)
+    )
 
     # Test limit=2
     async with KalshiClient() as client:
@@ -77,9 +77,9 @@ async def test_get_market(respx_mock):
     markets_data = load_fixture("markets_response.json")
     ticker = markets_data["markets"][0]["ticker"]
 
-    respx_mock.get(
-        f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}"
-    ).mock(return_value=httpx.Response(200, json={"market": markets_data["markets"][0]}))
+    respx_mock.get(f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}").mock(
+        return_value=httpx.Response(200, json={"market": markets_data["markets"][0]})
+    )
 
     async with KalshiClient() as client:
         market = await client.get_market(ticker)
@@ -147,9 +147,9 @@ async def test_get_trades(respx_mock):
     ticker = markets_data["markets"][0]["ticker"]
     trades_data = load_fixture("trades_response.json")
 
-    respx_mock.get(
-        f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}/trades"
-    ).mock(return_value=httpx.Response(200, json=trades_data))
+    respx_mock.get(f"https://api.elections.kalshi.com/trade-api/v2/markets/{ticker}/trades").mock(
+        return_value=httpx.Response(200, json=trades_data)
+    )
 
     async with KalshiClient() as client:
         trades = []
@@ -271,9 +271,9 @@ async def test_excludes_multivariate_by_default(respx_mock):
     markets_data = load_fixture("markets_response.json")
 
     # Verify the request includes mve_filter=exclude
-    route = respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+    route = respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=markets_data)
+    )
 
     async with KalshiClient() as client:
         markets = []
@@ -292,9 +292,9 @@ async def test_includes_multivariate_when_opted_in(respx_mock):
     markets_data = load_fixture("markets_response.json")
 
     # Verify the request does NOT include mve_filter when opted in
-    route = respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+    route = respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=markets_data)
+    )
 
     async with KalshiClient() as client:
         markets = []
@@ -318,9 +318,9 @@ async def test_list_markets_returns_exact_limit(respx_mock):
         markets_data["markets"].append(markets_data["markets"][0].copy())
 
     # Mock the response
-    route = respx_mock.get(
-        "https://api.elections.kalshi.com/trade-api/v2/markets"
-    ).mock(return_value=httpx.Response(200, json=markets_data))
+    route = respx_mock.get("https://api.elections.kalshi.com/trade-api/v2/markets").mock(
+        return_value=httpx.Response(200, json=markets_data)
+    )
 
     async with KalshiClient() as client:
         markets = []

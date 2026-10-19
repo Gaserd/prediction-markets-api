@@ -166,6 +166,22 @@ export POLYMARKET_WALLET_ADDRESS="0x..."
 - **`max_order_size` limit**: Configurable per-client safety limit
 - **Explicit opt-in for real trading**: Must pass `dry_run=False`
 
+## Venues & referral links
+
+This library is free and open source (MIT). Some links below are **referral links**: if you sign up through them, the venue may pay the project a share of fees or a bonus. It costs you nothing extra, and using the library never requires them. Plain links are given next to each one.
+
+<!-- venues-table:start -->
+| Venue | Sign up | Referral? | Closed markets | Notes |
+|---|---|---|---|---|
+| Limitless | [limitless.exchange](https://limitless.exchange?r=0D2RQUXIT4) | yes (`r=0D2RQUXIT4`) | no | plain link: https://limitless.exchange |
+| Polymarket | [polymarket.com](https://polymarket.com) | no | yes |  |
+| Kalshi | [kalshi.com](https://kalshi.com) | no | yes |  |
+<!-- venues-table:end -->
+
+Referral links are defined in `src/prediction_markets_api/venues.py` (the same registry that generates this table), so you can see exactly what is linked and change it in a fork.
+
+Trading and builder-code attribution are not part of 0.9 (read-only). How builder codes will work, what they cost and how to turn them off will be documented here before 1.0.
+
 ## Supported Venues
 
 **Note**: Signup links are referral links; the project receives a reward when you sign up.

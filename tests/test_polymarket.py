@@ -347,6 +347,7 @@ async def test_fixture_consistency():
 
     # Verify recorded within a short time window (allowing for sequential recording)
     from datetime import datetime
+
     book_time = datetime.fromisoformat(book_meta["recorded_at"])
     price_time = datetime.fromisoformat(price_meta["recorded_at"])
     time_diff = abs((book_time - price_time).total_seconds())
@@ -393,7 +394,9 @@ async def test_price_matches_order_book_top(orderbook_response, prices_response,
         buy_price = await client.get_price(outcome_id, OrderSide.BUY)
 
     # User BUY price should match best ask (what user pays)
-    assert buy_price.price == best_ask, f"BUY price {buy_price.price} should match best ask {best_ask}"
+    assert buy_price.price == best_ask, (
+        f"BUY price {buy_price.price} should match best ask {best_ask}"
+    )
 
     # Reset mocks and test SELL price
     respx_mock.reset()
@@ -405,4 +408,6 @@ async def test_price_matches_order_book_top(orderbook_response, prices_response,
         sell_price = await client.get_price(outcome_id, OrderSide.SELL)
 
     # User SELL price should match best bid (what user receives)
-    assert sell_price.price == best_bid, f"SELL price {sell_price.price} should match best bid {best_bid}"
+    assert sell_price.price == best_bid, (
+        f"SELL price {sell_price.price} should match best bid {best_bid}"
+    )

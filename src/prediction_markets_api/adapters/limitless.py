@@ -84,7 +84,13 @@ class LimitlessClient(BaseClient):
 
         Raises:
             ValueError: If API returns invalid data
+            NotImplementedError: If closed=True (Limitless only exposes /markets/active)
         """
+        if closed is True:
+            raise NotImplementedError(
+                "Limitless only exposes /markets/active; closed=True is not supported"
+            )
+
         url = f"{self.API_BASE}/markets/active"
         params: dict[str, Any] = {"limit": min(page_size, 25)}
 

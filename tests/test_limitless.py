@@ -51,7 +51,9 @@ async def test_list_markets(limitless_client, markets_response):
     mock_response.json.return_value = markets_response
     mock_response.raise_for_status = MagicMock()
 
-    with patch.object(limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)):
+    with patch.object(
+        limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)
+    ):
         markets = []
         async for market in limitless_client.list_markets(limit=3):
             markets.append(market)
@@ -82,7 +84,9 @@ async def test_get_market(limitless_client, markets_response):
     mock_response.json.return_value = market_data
     mock_response.raise_for_status = MagicMock()
 
-    with patch.object(limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)):
+    with patch.object(
+        limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)
+    ):
         market = await limitless_client.get_market("btc-up-or-down-5-min-1791612600")
 
         assert market.id == "btc-up-or-down-5-min-1791612600"
@@ -98,7 +102,9 @@ async def test_get_order_book(limitless_client, orderbook_response):
     mock_response.json.return_value = orderbook_response
     mock_response.raise_for_status = MagicMock()
 
-    with patch.object(limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)):
+    with patch.object(
+        limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)
+    ):
         book = await limitless_client.get_order_book("btc-up-or-down-5-min-1791612600")
 
         assert book.outcome_id == "btc-up-or-down-5-min-1791612600"
@@ -131,13 +137,19 @@ async def test_get_order_book_and_price_consistency(limitless_client, orderbook_
     mock_response.json.return_value = orderbook_response
     mock_response.raise_for_status = MagicMock()
 
-    with patch.object(limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)):
+    with patch.object(
+        limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)
+    ):
         # Get order book
         book = await limitless_client.get_order_book("btc-up-or-down-5-min-1791612600")
 
         # Get prices
-        buy_price = await limitless_client.get_price("btc-up-or-down-5-min-1791612600", OrderSide.BUY)
-        sell_price = await limitless_client.get_price("btc-up-or-down-5-min-1791612600", OrderSide.SELL)
+        buy_price = await limitless_client.get_price(
+            "btc-up-or-down-5-min-1791612600", OrderSide.BUY
+        )
+        sell_price = await limitless_client.get_price(
+            "btc-up-or-down-5-min-1791612600", OrderSide.SELL
+        )
 
         # Verify get_price(BUY) returns best ask
         assert buy_price.price == book.asks[0].price
@@ -155,7 +167,9 @@ async def test_get_price_buy(limitless_client, orderbook_response):
     mock_response.json.return_value = orderbook_response
     mock_response.raise_for_status = MagicMock()
 
-    with patch.object(limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)):
+    with patch.object(
+        limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)
+    ):
         price = await limitless_client.get_price("btc-up-or-down-5-min-1791612600", OrderSide.BUY)
 
         assert price.side == OrderSide.BUY
@@ -172,7 +186,9 @@ async def test_get_price_sell(limitless_client, orderbook_response):
     mock_response.json.return_value = orderbook_response
     mock_response.raise_for_status = MagicMock()
 
-    with patch.object(limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)):
+    with patch.object(
+        limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)
+    ):
         price = await limitless_client.get_price("btc-up-or-down-5-min-1791612600", OrderSide.SELL)
 
         assert price.side == OrderSide.SELL
@@ -189,7 +205,9 @@ async def test_get_trades(limitless_client, trades_response):
     mock_response.json.return_value = trades_response
     mock_response.raise_for_status = MagicMock()
 
-    with patch.object(limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)):
+    with patch.object(
+        limitless_client._http_client, "get", new=AsyncMock(return_value=mock_response)
+    ):
         trades = []
         async for trade in limitless_client.get_trades("btc-up-or-down-5-min-1791612600", limit=10):
             trades.append(trade)
