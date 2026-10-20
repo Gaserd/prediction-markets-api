@@ -40,6 +40,9 @@ class VenueInfo:
     status: VenueStatus
     signup_link_key: str
     liquidity_source: str | None  # Venue field that maps to Market.liquidity, or None
+    url: str
+    referral_url: str | None
+    supports_closed_markets: bool
 
 
 # Venue registry
@@ -57,6 +60,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.IMPLEMENTED,
         signup_link_key="polymarket",
         liquidity_source="liquidityNum",  # Polymarket provides liquidity metric
+        url="https://polymarket.com",
+        referral_url=None,
+        supports_closed_markets=True,
     ),
     "kalshi": VenueInfo(
         name="Kalshi",
@@ -69,6 +75,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.IMPLEMENTED,
         signup_link_key="kalshi",
         liquidity_source=None,  # Kalshi does not provide liquidity metric
+        url="https://kalshi.com",
+        referral_url=None,
+        supports_closed_markets=True,
     ),
     "limitless": VenueInfo(
         name="Limitless",
@@ -81,6 +90,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.IMPLEMENTED,
         signup_link_key="limitless",
         liquidity_source=None,  # Limitless does not provide liquidity (absent on all ~75 checked live markets)
+        url="https://limitless.exchange",
+        referral_url="https://limitless.exchange?r=0D2RQUXIT4",
+        supports_closed_markets=False,
     ),
     # Wave 2
     "hyperliquid": VenueInfo(
@@ -94,6 +106,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="hyperliquid",
         liquidity_source=None,  # Unknown until implemented
+        url="https://hyperliquid.xyz",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "predict_fun": VenueInfo(
         name="Predict.fun",
@@ -106,6 +121,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="predict_fun",
         liquidity_source=None,  # Unknown until implemented
+        url="https://predict.fun",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "opinion": VenueInfo(
         name="Opinion",
@@ -118,6 +136,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="opinion",
         liquidity_source=None,  # Unknown until implemented
+        url="https://opinion.finance",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "pascal": VenueInfo(
         name="Pascal",
@@ -130,6 +151,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="pascal",
         liquidity_source=None,  # Unknown until implemented
+        url="https://pascal.money",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     # Wave 3
     "sx_bet": VenueInfo(
@@ -143,6 +167,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="sx_bet",
         liquidity_source=None,  # Unknown until implemented
+        url="https://sx.bet",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "azuro": VenueInfo(
         name="Azuro/Bookmaker.xyz",
@@ -155,6 +182,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="azuro",
         liquidity_source=None,  # Unknown until implemented
+        url="https://azuro.org",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "jupiter": VenueInfo(
         name="Jupiter Prediction",
@@ -167,6 +197,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="jupiter",
         liquidity_source=None,  # Unknown until implemented
+        url="https://jup.ag",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     # Wave 4
     "polymarket_us": VenueInfo(
@@ -180,6 +213,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="polymarket_us",
         liquidity_source=None,  # Unknown until implemented
+        url="https://polymarket.com",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "novig": VenueInfo(
         name="Novig",
@@ -192,6 +228,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="novig",
         liquidity_source=None,  # Unknown until implemented
+        url="https://novig.com",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "world": VenueInfo(
         name="World",
@@ -204,6 +243,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="world",
         liquidity_source=None,  # Unknown until implemented
+        url="https://world.org",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
     "betdex": VenueInfo(
         name="BetDEX",
@@ -216,6 +258,9 @@ VENUES: dict[str, VenueInfo] = {
         status=VenueStatus.PLANNED,
         signup_link_key="betdex",
         liquidity_source=None,  # Unknown until implemented
+        url="https://betdex.com",
+        referral_url=None,
+        supports_closed_markets=False,
     ),
 }
 

@@ -92,7 +92,7 @@ class LimitlessClient(BaseClient):
 
         Raises:
             NotImplementedError: If closed=True (Limitless API only provides /markets/active)
-            ValueError: If API returns invalid data
+            VenueAPIError: If API request fails
         """
         if closed is True:
             raise NotImplementedError(
