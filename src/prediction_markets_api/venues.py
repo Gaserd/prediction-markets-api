@@ -101,14 +101,14 @@ VENUES: dict[str, VenueInfo] = {
         geo_restrictions=None,
         api_key_for_read=False,
         api_key_for_trade=True,
-        can_read=False,
-        can_trade=False,
-        status=VenueStatus.PLANNED,
+        can_read=True,
+        can_trade=False,  # Stub only; place_order does not submit
+        status=VenueStatus.IMPLEMENTED,
         signup_link_key="hyperliquid",
-        liquidity_source=None,  # Unknown until implemented
+        liquidity_source=None,  # outcomeMeta has no liquidity field
         url="https://hyperliquid.xyz",
         referral_url=None,
-        supports_closed_markets=False,
+        supports_closed_markets=False,  # settledOutcome is by id; there is no closed listing
     ),
     "predict_fun": VenueInfo(
         name="Predict.fun",

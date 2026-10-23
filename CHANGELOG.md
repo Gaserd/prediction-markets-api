@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Read-only **Hyperliquid Outcomes (HIP-4)** adapter (`HyperliquidClient`):
+  `list_markets`, `get_market`, `get_order_book`, `get_price`, `get_trades`, and
+  `iter_trades` on the public `POST https://api.hyperliquid.xyz/info` API.
+  Listing uses `outcomeMeta` (plus `outcomeTemplates` for display names and
+  `allMids` for prices). Order books use `l2Book` and trades use `recentTrades`,
+  addressed by the `#<10 * outcome + side>` coin. `get_market` loads one settled
+  outcome by id via `settledOutcome`. `list_markets(closed=True)` raises
+  `NotImplementedError` (`supports_closed_markets` is false): settled markets are
+  not listable. `recentTrades` returns a single non-paginated window.
+  `outcomeMeta` does not include creation time, volume, open interest, or liquidity.
+
 ## [0.9.0] - Unreleased
 
 Read-only pre-release. Market data can be listed, fetched, and normalized across

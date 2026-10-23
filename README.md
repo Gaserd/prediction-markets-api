@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A unified Python client for prediction markets. Currently supports **Polymarket**, with **Kalshi** and **Limitless** adapters planned.
+A unified Python client for prediction markets. Currently supports **Polymarket**, **Kalshi**, **Limitless**, and **Hyperliquid Outcomes (HIP-4)**.
 
 ## Features
 
@@ -158,6 +158,9 @@ All venues return data through a unified model with strict guarantees:
 | | `closed` | `CLOSED` | False | Market closed but outcome not yet determined |
 | | `resolved` | `RESOLVED` | True | Market resolved, outcome prices settled to 0/1 |
 | **Limitless** | `FUNDED` | `OPEN` | False | Market is active and funded |
+| **Hyperliquid Outcomes** | `open` | `OPEN` | False | Listed by `outcomeMeta` and the expiry is still in the future |
+| | `expired` | `CLOSED` | False | Expiry has passed but the outcome is still listed (not settled) |
+| | `settled` | `RESOLVED` | True | Loaded by id via `settledOutcome`. `settleFraction` `1` / `0` sets the winning side |
 
 **Notes:**
 - Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
@@ -168,6 +171,7 @@ All venues return data through a unified model with strict guarantees:
   - This minimizes false positives from markets trading near certainty but not yet formally resolved
   - Winning outcome automatically detected from settled prices
 - Limitless only exposes `FUNDED` markets via `/markets/active` endpoint. Calling `list_markets(closed=True)` raises `NotImplementedError` with a clear explanation, since the API does not provide an endpoint for closed/resolved markets.
+- Hyperliquid Outcomes lists live markets from `outcomeMeta` only. `list_markets(closed=True)` raises `NotImplementedError`. A single settled outcome can still be loaded with `get_market` when its numeric id is known (`settledOutcome`). `recentTrades` is one short window with no cursor, and `l2Book` returns at most 20 levels per side.
 
 ### Adapter Architecture
 
@@ -250,7 +254,7 @@ from prediction_markets_api import (
 
 **User Input Errors:**
 - `ValueError`: Invalid parameters (e.g., price not in 0..1, negative size)
-- `NotImplementedError`: Unsupported operations (e.g., `LimitlessClient.list_markets(closed=True)`)
+- `NotImplementedError`: Unsupported operations (e.g., `LimitlessClient.list_markets(closed=True)`, `HyperliquidClient.list_markets(closed=True)`)
 
 **Example:**
 
@@ -382,6 +386,7 @@ This library is free and open source (MIT). Some links below are **referral link
 | Limitless | [limitless.exchange](https://limitless.exchange?r=0D2RQUXIT4) | yes (`r=0D2RQUXIT4`) | no | plain link: https://limitless.exchange |
 | Polymarket | [polymarket.com](https://polymarket.com) | no | yes |  |
 | Kalshi | [kalshi.com](https://kalshi.com) | no | yes |  |
+| Hyperliquid Outcomes (HIP-4) | [hyperliquid.xyz](https://hyperliquid.xyz) | no | no |  |
 <!-- venues-table:end -->
 
 Referral links are defined in `src/prediction_markets_api/venues.py` (the same registry that generates this table), so you can see exactly what is linked and change it in a fork.
@@ -397,7 +402,7 @@ Sign-up links and referral disclosure: see [Venues & referral links](#venues--re
 | Polymarket | Polygon | ✅ Implemented | ✅ | — | No | Yes | US blocked | [Link](https://polymarket.com) |
 | Kalshi | None | ✅ Implemented | ✅ | — | No | Yes | US only | [Link](https://kalshi.com) |
 | Limitless | Base | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://limitless.exchange) |
-| Hyperliquid Outcomes (HIP-4) | Hyperliquid | 🚧 Planned | — | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
+| Hyperliquid Outcomes (HIP-4) | Hyperliquid | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
 | Predict.fun | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://predict.fun) |
 | Opinion | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://opinion.finance) |
 | Pascal | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://pascal.money) |
