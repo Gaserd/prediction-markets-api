@@ -8,6 +8,16 @@ from typing import Any
 from prediction_markets_api.models.base import Market, OrderBook, OrderSide, Price, Trade
 
 
+def validate_limit(limit: int | None) -> None:
+    """Raise ValueError when a read method is given a non-positive limit.
+
+    ``None`` means unlimited and is valid. Adapters call this before any HTTP
+    request so ``limit <= 0`` never reaches the venue.
+    """
+    if limit is not None and limit <= 0:
+        raise ValueError(f"limit must be positive, got {limit}")
+
+
 class BaseClient(ABC):
     """Base client interface that all venue adapters implement.
 
@@ -32,6 +42,9 @@ class BaseClient(ABC):
 
         Yields:
             Market objects (up to `limit` total)
+
+        Raises:
+            ValueError: If limit is not None and limit <= 0
         """
         raise NotImplementedError
         yield  # pragma: no cover
@@ -116,10 +129,16 @@ class BaseClient(ABC):
         Yields:
             Trade objects (up to `limit` total)
 
+        Raises:
+            ValueError: If limit <= 0
+            TypeError: If an unknown keyword argument is passed
+
         Note:
-            Venue-specific filters should be keyword-only arguments
-            in the concrete implementation.
+            Venue-specific filters are keyword-only arguments on the concrete
+            adapter. This method does not accept **kwargs.
         """
+        raise NotImplementedError
+        yield  # pragma: no cover
 
     @abstractmethod
     async def iter_trades(
