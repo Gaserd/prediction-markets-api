@@ -2,7 +2,8 @@
 # No API tokens. Nothing runs on push to a branch, and a git tag push alone does not publish.
 #
 # TestPyPI: Actions → Publish → Run workflow (workflow_dispatch only).
-# PyPI: the same manual run with "publish_pypi" checked, or a published GitHub Release.
+# PyPI: the same manual run with "publish_pypi" checked, after TestPyPI succeeds,
+# or a published GitHub Release (TestPyPI is skipped on that path).
 #
 # Trusted publisher (register on BOTH https://test.pypi.org and https://pypi.org):
 #   Owner: Gaserd
@@ -33,7 +34,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -82,10 +82,14 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    needs: build
+    needs: [build, publish-testpypi]
+    # Manual dispatch waits for TestPyPI. A release skips TestPyPI; treat that
+    # skip as success so PyPI still runs, and block PyPI if TestPyPI failed.
     if: >-
-      github.event_name == 'release' ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish_pypi)
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.publish-testpypi.result == 'success' || needs.publish-testpypi.result == 'skipped') &&
+      (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish_pypi))
     runs-on: ubuntu-latest
     environment:
       name: pypi

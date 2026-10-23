@@ -1549,7 +1549,7 @@ async def test_list_markets_unknown_keyword_raises(adapter_client):
 @pytest.mark.asyncio
 @pytest.mark.xfail(
     strict=True,
-    reason="place_order still accepts **kwargs; required before trading PR merges",
+    reason="place_order still accepts **kwargs; kept intentionally until 1.0",
 )
 async def test_place_order_unknown_keyword_raises(adapter_client):
     """Verify place_order with unknown keyword argument raises TypeError.
@@ -1557,8 +1557,8 @@ async def test_place_order_unknown_keyword_raises(adapter_client):
     place_order should not accept arbitrary **kwargs for type safety.
     Unknown keywords must raise TypeError immediately.
 
-    Currently xfail because base/adapters still have **kwargs on main.
-    This must pass before the trading implementation PR merges.
+    Currently xfail because place_order still accepts **kwargs.
+    Kept intentionally until 1.0.
     """
     from decimal import Decimal
 
