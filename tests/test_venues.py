@@ -6,8 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from prediction_markets_api import KalshiClient, LimitlessClient, PolymarketClient
-from prediction_markets_api.venues import VENUES
+from prediction_markets_api import (
+    HyperliquidClient,
+    KalshiClient,
+    LimitlessClient,
+    PolymarketClient,
+)
+from prediction_markets_api.venues import VENUES, VenueStatus
 
 
 def test_all_venues_have_new_fields():
@@ -52,6 +57,19 @@ def test_kalshi_fields():
     assert venue.supports_closed_markets is True
 
 
+def test_hyperliquid_fields():
+    """Test Hyperliquid Outcomes is a read-only implemented venue."""
+    venue = VENUES["hyperliquid"]
+    assert venue.url == "https://hyperliquid.xyz"
+    assert venue.referral_url is None
+    assert venue.supports_closed_markets is False
+    assert venue.can_read is True
+    assert venue.can_trade is False
+    assert venue.status == VenueStatus.IMPLEMENTED
+    assert venue.liquidity_source is None
+    assert venue.api_key_for_read is False
+
+
 @pytest.mark.asyncio
 async def test_limitless_raises_not_implemented_for_closed_markets():
     """Test that Limitless raises NotImplementedError when closed=True."""
@@ -59,6 +77,21 @@ async def test_limitless_raises_not_implemented_for_closed_markets():
 
     with pytest.raises(
         NotImplementedError, match="Limitless API does not provide an endpoint for listing closed"
+    ):
+        async for _ in client.list_markets(closed=True):
+            pass
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_hyperliquid_raises_not_implemented_for_closed_markets():
+    """Settled HIP-4 markets are not listable; closed=True is unsupported."""
+    client = HyperliquidClient()
+
+    with pytest.raises(
+        NotImplementedError,
+        match="does not provide an endpoint for listing closed",
     ):
         async for _ in client.list_markets(closed=True):
             pass
@@ -152,7 +185,7 @@ def test_referral_links_in_readme():
     readme_table = readme_content[start_idx:end_idx].strip()
 
     # Check each venue
-    for venue_key in ["limitless", "polymarket", "kalshi"]:
+    for venue_key in ["limitless", "polymarket", "kalshi", "hyperliquid"]:
         venue = VENUES[venue_key]
 
         if venue.referral_url:

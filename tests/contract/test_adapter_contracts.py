@@ -22,9 +22,11 @@ Contract checks:
     11. Trading safety (dry_run defaults, max_order_size enforcement)
 """
 
+import json
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 import respx
@@ -37,6 +39,37 @@ from tests.contract.adapter_registry import discover_adapters, load_fixtures
 # Discover all adapters at collection time
 FIXTURES_BASE = Path(__file__).parent.parent / "fixtures"
 ADAPTERS = discover_adapters(FIXTURES_BASE)
+
+# Hyperliquid Outcomes reads go through one POST /info URL. The body `type`
+# selects outcomeMeta, l2Book, recentTrades, and the other info methods.
+HYPERLIQUID_INFO = "https://api.hyperliquid.xyz/info"
+
+
+def mock_markets(adapter_name: str, payload: Any) -> Any:
+    """Mock the listing endpoint. Hyperliquid posts outcomeMeta to /info."""
+    if adapter_name == "hyperliquid":
+        return respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=payload))
+    return respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=payload))
+
+
+def mock_order_book(adapter_name: str, payload: Any) -> Any:
+    """Mock the order book endpoint for this adapter."""
+    if adapter_name == "hyperliquid":
+        return respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=payload))
+    if adapter_name in ("kalshi", "limitless"):
+        return respx.get(url__regex=r".*/orderbook.*").mock(
+            return_value=Response(200, json=payload)
+        )
+    return respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=payload))
+
+
+def mock_trades(adapter_name: str, payload: Any) -> Any:
+    """Mock the trades endpoint for this adapter."""
+    if adapter_name == "hyperliquid":
+        return respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=payload))
+    if adapter_name == "limitless":
+        return respx.get(url__regex=r".*/events.*").mock(return_value=Response(200, json=payload))
+    return respx.get(url__regex=r".*/trades.*").mock(return_value=Response(200, json=payload))
 
 
 @pytest.fixture(params=ADAPTERS, ids=[a.name for a in ADAPTERS])
@@ -77,7 +110,7 @@ async def test_prices_are_decimal_in_range(adapter_config, adapter_fixtures, ada
 
         with respx.mock:
             # Mock the HTTP response
-            respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=data))
+            mock_markets(adapter_config.name, data)
 
             markets = []
             async for market in adapter_client.list_markets(limit=100):
@@ -111,7 +144,7 @@ async def test_prices_are_decimal_in_range(adapter_config, adapter_fixtures, ada
 
         if outcome_id:
             with respx.mock:
-                respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
+                mock_order_book(adapter_config.name, data)
 
                 book = await adapter_client.get_order_book(outcome_id)
 
@@ -180,7 +213,7 @@ async def test_timestamps_are_utc_aware(adapter_config, adapter_fixtures, adapte
         data = fixtures["markets_response"]["data"]
 
         with respx.mock:
-            respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=data))
+            mock_markets(adapter_config.name, data)
 
             async for market in adapter_client.list_markets(limit=100):
                 assert market.created_at.tzinfo is not None, "created_at must be timezone-aware"
@@ -204,7 +237,7 @@ async def test_timestamps_are_utc_aware(adapter_config, adapter_fixtures, adapte
 
         if outcome_id:
             with respx.mock:
-                respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
+                mock_order_book(adapter_config.name, data)
 
                 book = await adapter_client.get_order_book(outcome_id)
                 assert book.timestamp.tzinfo is not None, (
@@ -251,7 +284,7 @@ async def test_timestamps_are_utc_aware(adapter_config, adapter_fixtures, adapte
         outcome_id = meta.get("token_id") or meta.get("asset_id") if meta else None
         if outcome_id:
             with respx.mock:
-                respx.get(url__regex=r".*/trades.*").mock(return_value=Response(200, json=data))
+                mock_trades(adapter_config.name, data)
 
                 async for trade in adapter_client.get_trades(outcome_id, limit=1):
                     assert trade.timestamp.tzinfo is not None, (
@@ -277,7 +310,7 @@ async def test_currency_explicit_with_amounts(adapter_config, adapter_fixtures, 
         data = fixtures["markets_response"]["data"]
 
         with respx.mock:
-            respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=data))
+            mock_markets(adapter_config.name, data)
 
             async for market in adapter_client.list_markets(limit=100):
                 if market.volume is not None or market.liquidity is not None:
@@ -299,7 +332,7 @@ async def test_currency_explicit_with_amounts(adapter_config, adapter_fixtures, 
 
         if outcome_id:
             with respx.mock:
-                respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
+                mock_order_book(adapter_config.name, data)
 
                 book = await adapter_client.get_order_book(outcome_id)
                 # Order books always have sizes, so currency must be set
@@ -321,7 +354,7 @@ async def test_partial_is_bool(adapter_config, adapter_fixtures, adapter_client)
         data = fixtures["markets_response"]["data"]
 
         with respx.mock:
-            respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=data))
+            mock_markets(adapter_config.name, data)
 
             async for market in adapter_client.list_markets(limit=100):
                 assert isinstance(market.partial, bool), (
@@ -341,7 +374,7 @@ async def test_partial_is_bool(adapter_config, adapter_fixtures, adapter_client)
 
         if outcome_id:
             with respx.mock:
-                respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
+                mock_order_book(adapter_config.name, data)
 
                 book = await adapter_client.get_order_book(outcome_id)
                 assert isinstance(book.partial, bool), (
@@ -365,7 +398,7 @@ async def test_market_ids_unique_and_venue_set(adapter_config, adapter_fixtures,
     data = fixtures["markets_response"]["data"]
 
     with respx.mock:
-        respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=data))
+        mock_markets(adapter_config.name, data)
 
         market_ids = set()
         async for market in adapter_client.list_markets(limit=100):
@@ -411,12 +444,7 @@ async def test_orderbook_validation(adapter_config, adapter_fixtures, adapter_cl
 
     with respx.mock:
         # Mock the appropriate endpoint for each adapter
-        if adapter_config.name == "kalshi":
-            respx.get(url__regex=r".*/orderbook.*").mock(return_value=Response(200, json=data))
-        elif adapter_config.name == "limitless":
-            respx.get(url__regex=r".*/orderbook.*").mock(return_value=Response(200, json=data))
-        else:
-            respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=data))
+        mock_order_book(adapter_config.name, data)
 
         book = await adapter_client.get_order_book(outcome_id)
 
@@ -518,24 +546,9 @@ async def test_get_price_matches_orderbook(adapter_config, adapter_fixtures, ada
         pytest.skip(f"Cannot determine outcome_id for {adapter_config.name}")
 
     with respx.mock:
-        # Mock order book endpoint for both get_order_book and get_price where applicable
-        if adapter_config.name == "polymarket":
-            respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=orderbook_data))
-        elif adapter_config.name == "kalshi":
-            # Kalshi uses /orderbook for both get_order_book and get_price
-            respx.get(url__regex=r".*/orderbook.*").mock(
-                return_value=Response(200, json=orderbook_data)
-            )
-        elif adapter_config.name == "limitless":
-            # Limitless uses /orderbook for both get_order_book and get_price
-            respx.get(url__regex=r".*/orderbook.*").mock(
-                return_value=Response(200, json=orderbook_data)
-            )
-        else:
-            # Generic fallback
-            respx.get(url__regex=r".*/book.*|.*/orderbook.*").mock(
-                return_value=Response(200, json=orderbook_data)
-            )
+        # Mock order book endpoint for both get_order_book and get_price where applicable.
+        # Polymarket additionally mocks /price below; other venues price off the book.
+        mock_order_book(adapter_config.name, orderbook_data)
 
         # Mock price endpoint for Polymarket (separate /price API)
         if adapter_config.name == "polymarket" and "prices_response" in fixtures:
@@ -591,6 +604,17 @@ async def test_list_markets_respects_limit(adapter_config, adapter_fixtures, ada
 
     data = fixtures["markets_response"]["data"]
 
+    # Hyperliquid listing is one outcomeMeta snapshot (no cursor). limit stops
+    # the iterator after one market and must not request outcomeMeta again.
+    if adapter_config.name == "hyperliquid":
+        with respx.mock:
+            route = respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=data))
+            markets = [market async for market in adapter_client.list_markets(limit=1)]
+            assert len(markets) == 1
+            bodies = [json.loads(call.request.content) for call in route.calls]
+            assert sum(1 for body in bodies if body.get("type") == "outcomeMeta") == 1
+        return
+
     # Create mock response with multiple pages
     page1 = {"markets": data.get("markets", [])[:1], "nextCursor": "page2"}
     page2 = {"markets": data.get("markets", [])[1:2], "nextCursor": None}
@@ -637,7 +661,7 @@ async def test_liquidity_matches_raw_field(adapter_config, adapter_fixtures, ada
     data = fixtures["markets_response"]["data"]
 
     with respx.mock:
-        respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=data))
+        mock_markets(adapter_config.name, data)
 
         async for market in adapter_client.list_markets(limit=100):
             raw_data = market.raw_data
@@ -679,9 +703,7 @@ async def test_best_bid_ask_sizes_match_orderbook(adapter_config, adapter_fixtur
                 return_value=Response(200, json=markets_data)
             )
         else:
-            respx.get(url__regex=r".*/markets.*").mock(
-                return_value=Response(200, json=markets_data)
-            )
+            mock_markets(adapter_config.name, markets_data)
 
         # Get first market
         async for market in adapter_client.list_markets(limit=1):
@@ -1162,12 +1184,17 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             mock_data = {"markets": [], "cursor": None}
         elif adapter_config.name == "limitless":
             mock_data = {"data": []}
+        elif adapter_config.name == "hyperliquid":
+            mock_data = {"outcomes": [], "questions": []}
         else:
             mock_data = []
 
-        route = respx.get(url__regex=r".*/markets.*").mock(
-            return_value=Response(200, json=mock_data)
-        )
+        if adapter_config.name == "hyperliquid":
+            route = respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=mock_data))
+        else:
+            route = respx.get(url__regex=r".*/markets.*").mock(
+                return_value=Response(200, json=mock_data)
+            )
 
         # Test closed=False
         route.calls.clear()
@@ -1186,9 +1213,17 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
         elif adapter_config.name == "kalshi":
             # Kalshi uses status filter: closed=False -> status=open
             assert params.get("status") == "open", "Kalshi closed=False must send status=open"
+        elif adapter_config.name == "hyperliquid":
+            assert "closed" not in params
+            assert "status" not in params
+            assert json.loads(request.content)["type"] == "outcomeMeta"
 
-        # Test closed=True (Limitless raises NotImplementedError, tested separately)
-        if adapter_config.name != "limitless":
+        # Test closed=True (Limitless and Hyperliquid raise NotImplementedError)
+        if adapter_config.name == "hyperliquid":
+            with pytest.raises(NotImplementedError):
+                async for _ in adapter_client.list_markets(closed=True, limit=1):
+                    pass
+        elif adapter_config.name != "limitless":
             route.calls.clear()
             count = 0
             async for _ in adapter_client.list_markets(closed=True, limit=1):
@@ -1232,6 +1267,10 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             # Limitless doesn't have status/closed filter params
             assert "status" not in params, "Limitless closed=None must not send status param"
             assert "closed" not in params, "Limitless closed=None must not send closed param"
+        elif adapter_config.name == "hyperliquid":
+            assert "status" not in params, "Hyperliquid closed=None must not send status param"
+            assert "closed" not in params, "Hyperliquid closed=None must not send closed param"
+            assert json.loads(request.content)["type"] == "outcomeMeta"
 
 
 # =============================================================================
@@ -1278,6 +1317,22 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                 "size": (10 + index) * 1000000,  # 6-decimal units
                 "timestamp": 1791697593 + index,
             }
+        elif adapter_config.name == "hyperliquid":
+            # recentTrades shape. One response is the whole window (no cursor).
+            return {
+                "coin": "#10",
+                "side": "B" if index % 2 == 0 else "A",
+                "px": f"{0.50 + (index % 10) * 0.01:.2f}",
+                "sz": str(10 + index),
+                "time": 1791697593000 + index,
+                "hash": f"0x{index:064x}",
+                "tid": 1000 + index,
+                "users": [
+                    "0x1111111111111111111111111111111111111111",
+                    "0x2222222222222222222222222222222222222222",
+                ],
+            }
+        raise AssertionError(f"no synthetic trade for {adapter_config.name}")
 
     outcome_id = "test_market_123"
 
@@ -1287,6 +1342,9 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
         # Limitless: single page only (no pagination), cap at 100
         trades_page = [build_trade(i) for i in range(100)]
         pages.append({"events": trades_page})
+    elif adapter_config.name == "hyperliquid":
+        # recentTrades is one JSON array, not a cursor.
+        pages.append([build_trade(i) for i in range(100)])
     else:
         # Polymarket/Kalshi: 3 pages × 50 each = 150 total
         for page_num in range(1, 4):  # 3 pages
@@ -1315,6 +1373,8 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                     return Response(200, json={"data": [], "next_cursor": None})
                 elif adapter_config.name == "kalshi":
                     return Response(200, json={"trades": [], "cursor": None})
+                elif adapter_config.name == "hyperliquid":
+                    return Response(200, json=[])
                 else:
                     return Response(200, json={"events": []})
 
@@ -1325,6 +1385,8 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
             route = respx.get(url__regex=r".*/trades.*").mock(side_effect=get_next_page)
         elif adapter_config.name == "limitless":
             route = respx.get(url__regex=r".*/events.*").mock(side_effect=get_next_page)
+        elif adapter_config.name == "hyperliquid":
+            route = respx.post(HYPERLIQUID_INFO).mock(side_effect=get_next_page)
 
         # Test with explicit limit=5 (should fetch exactly 5 from first page)
         page_index[0] = 0
@@ -1346,13 +1408,13 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
         async for trade in adapter_client.get_trades(outcome_id):
             trades_default.append(trade)
 
-        if adapter_config.name == "limitless":
-            # Limitless: single page, capped at 100
+        if adapter_config.name in ("limitless", "hyperliquid"):
+            # Single page, no cursor. The synthetic window has 100 trades.
             assert len(trades_default) == 100, (
-                f"get_trades() without limit returned {len(trades_default)} trades, expected 100 (Limitless caps at 100)"
+                f"get_trades() without limit returned {len(trades_default)} trades, expected 100"
             )
             assert route.call_count == 1, (
-                f"get_trades(limit=100) made {route.call_count} requests, expected 1 (Limitless: no pagination)"
+                f"get_trades(limit=100) made {route.call_count} requests, expected 1 (no pagination)"
             )
         else:
             # Polymarket/Kalshi: should fetch exactly 100 from 2 pages (50+50)
@@ -1370,12 +1432,12 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
         async for trade in adapter_client.iter_trades(outcome_id):
             all_trades.append(trade)
 
-        if adapter_config.name == "limitless":
+        if adapter_config.name in ("limitless", "hyperliquid"):
             assert len(all_trades) == 100, (
-                f"iter_trades() returned {len(all_trades)} trades, expected 100 (Limitless: single page, capped)"
+                f"iter_trades() returned {len(all_trades)} trades, expected 100 (single page)"
             )
             assert route.call_count == 1, (
-                f"iter_trades() made {route.call_count} requests, expected 1 (Limitless: no pagination)"
+                f"iter_trades() made {route.call_count} requests, expected 1 (no pagination)"
             )
         else:
             assert len(all_trades) == 150, (
@@ -1442,6 +1504,13 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
             )
             with pytest.raises(NotFoundError):
                 await adapter_client.get_market("nonexistent-slug")
+        elif adapter_config.name == "hyperliquid":
+            # Info API: an unknown resource is surfaced as HTTP 404 -> NotFoundError.
+            respx.post(HYPERLIQUID_INFO).mock(
+                return_value=Response(404, json={"error": "not found"})
+            )
+            with pytest.raises(NotFoundError):
+                await adapter_client.get_market("99999999")
 
     # Test NoLiquidityError for existing market with empty orderbook (Kalshi only)
     if adapter_config.name == "kalshi":
@@ -1488,9 +1557,14 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
 
     # Test HTTP 429 -> RateLimitError
     with respx.mock:
-        respx.get(url__regex=r".*/markets.*").mock(
-            return_value=Response(429, json={"error": "rate limit exceeded"})
-        )
+        if adapter_config.name == "hyperliquid":
+            respx.post(HYPERLIQUID_INFO).mock(
+                return_value=Response(429, json={"error": "rate limit exceeded"})
+            )
+        else:
+            respx.get(url__regex=r".*/markets.*").mock(
+                return_value=Response(429, json={"error": "rate limit exceeded"})
+            )
 
         with pytest.raises(RateLimitError):
             async for _ in adapter_client.list_markets(limit=1):
@@ -1498,9 +1572,14 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
 
     # Test HTTP 5xx -> VenueAPIError
     with respx.mock:
-        respx.get(url__regex=r".*/markets.*").mock(
-            return_value=Response(503, json={"error": "service unavailable"})
-        )
+        if adapter_config.name == "hyperliquid":
+            respx.post(HYPERLIQUID_INFO).mock(
+                return_value=Response(503, json={"error": "service unavailable"})
+            )
+        else:
+            respx.get(url__regex=r".*/markets.*").mock(
+                return_value=Response(503, json={"error": "service unavailable"})
+            )
 
         with pytest.raises(VenueAPIError):
             async for _ in adapter_client.list_markets(limit=1):

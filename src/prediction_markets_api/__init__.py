@@ -1,5 +1,6 @@
 """Unified Python client for prediction markets."""
 
+from prediction_markets_api.adapters.hyperliquid import HyperliquidClient
 from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.limitless import LimitlessClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
@@ -27,6 +28,7 @@ __all__ = [
     "PolymarketClient",
     "KalshiClient",
     "LimitlessClient",
+    "HyperliquidClient",
     "Market",
     "Outcome",
     "OrderBook",

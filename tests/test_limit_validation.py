@@ -7,11 +7,17 @@ import respx
 
 from prediction_markets_api import __version__
 from prediction_markets_api.adapters.base import BaseClient, validate_limit
+from prediction_markets_api.adapters.hyperliquid import HyperliquidClient
 from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.limitless import LimitlessClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
 
-READ_CLIENTS: list[type[BaseClient]] = [PolymarketClient, KalshiClient, LimitlessClient]
+READ_CLIENTS: list[type[BaseClient]] = [
+    PolymarketClient,
+    KalshiClient,
+    LimitlessClient,
+    HyperliquidClient,
+]
 
 
 def test_package_version_is_0_9_0() -> None:
