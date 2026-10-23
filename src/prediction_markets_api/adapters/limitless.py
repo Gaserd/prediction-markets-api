@@ -18,7 +18,7 @@ from typing import Any
 import httpx
 from dateutil import parser
 
-from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.adapters.base import BaseClient, validate_limit
 from prediction_markets_api.exceptions import (
     NoLiquidityError,
     NotFoundError,
@@ -91,9 +91,11 @@ class LimitlessClient(BaseClient):
             Market objects (up to `limit` total)
 
         Raises:
+            ValueError: If limit <= 0
             NotImplementedError: If closed=True (Limitless API only provides /markets/active)
             VenueAPIError: If API request fails
         """
+        validate_limit(limit)
         if closed is True:
             raise NotImplementedError(
                 "Limitless API does not provide an endpoint for listing closed or resolved markets. "
@@ -347,7 +349,7 @@ class LimitlessClient(BaseClient):
             currency=Currency.USDC,
         )
 
-    async def get_trades(  # type: ignore[override]
+    async def get_trades(
         self,
         outcome_id: str,
         limit: int = 100,
@@ -362,7 +364,12 @@ class LimitlessClient(BaseClient):
 
         Yields:
             Trade objects (up to `limit` total, max 100 from API)
+
+        Raises:
+            ValueError: If limit <= 0
+            TypeError: If an unknown keyword argument is passed
         """
+        validate_limit(limit)
         url = f"{self.API_BASE}/markets/{outcome_id}/events"
         params: dict[str, Any] = {
             "limit": min(limit, 100),

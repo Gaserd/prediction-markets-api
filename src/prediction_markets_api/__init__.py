@@ -21,7 +21,7 @@ from prediction_markets_api.models.base import (
     Trade,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "PolymarketClient",

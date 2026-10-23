@@ -883,10 +883,6 @@ async def test_place_order_enforces_max_order_size(adapter_config):
 # =============================================================================
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Library bug: get_trades has type: ignore[override] in polymarket.py:442, limitless.py:350, kalshi.py:412",
-)
 def test_no_type_ignore_override_in_adapters():
     """Verify no adapter source file contains type: ignore[override].
 
@@ -1512,10 +1508,6 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="Library bug: adapters do not validate limit<=0 (no ValueError raised)",
-)
 async def test_bad_argument_validation(adapter_config, adapter_client):
     """Verify bad arguments raise ValueError.
 

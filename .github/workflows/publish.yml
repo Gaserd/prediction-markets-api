@@ -1,0 +1,104 @@
+# Build an sdist and wheel, then publish with PyPI Trusted Publishing (OIDC).
+# No API tokens. Nothing runs on push to a branch, and a git tag push alone does not publish.
+#
+# TestPyPI: Actions → Publish → Run workflow (workflow_dispatch only).
+# PyPI: the same manual run with "publish_pypi" checked, or a published GitHub Release.
+#
+# Trusted publisher (register on BOTH https://test.pypi.org and https://pypi.org):
+#   Owner: Gaserd
+#   Repository: prediction-markets-api
+#   Workflow: publish.yml
+#   Environment: testpypi  (TestPyPI) or pypi (PyPI)
+# GitHub Actions environments must use those exact names.
+
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: "Also publish to PyPI (unchecked publishes to TestPyPI only)"
+        required: false
+        type: boolean
+        default: false
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist and wheel
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build
+        run: python -m pip install --upgrade pip build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/prediction-markets-api
+    permissions:
+      id-token: write
+      actions: read
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: >-
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_pypi)
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/prediction-markets-api
+    permissions:
+      id-token: write
+      actions: read
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

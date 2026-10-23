@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 from dateutil import parser
 
-from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.adapters.base import BaseClient, validate_limit
 from prediction_markets_api.exceptions import (
     NoLiquidityError,
     NotFoundError,
@@ -102,13 +102,14 @@ class KalshiClient(BaseClient):
             Market objects (up to `limit` total, applied AFTER client-side filtering for closed=None)
 
         Raises:
-            ValueError: If API returns invalid data
+            ValueError: If limit <= 0, or if the API returns invalid data
 
         Note:
             Kalshi accepts only ONE status per request. Valid filter statuses: unopened, open, closed, settled.
             Response statuses differ from filter: open->active, closed->determined, settled->finalized, unopened->initialized.
             For closed=True, two sequential requests are made (closed + settled) and results are combined.
         """
+        validate_limit(limit)
         # Determine which statuses to query
         statuses: list[str] = []
         if closed is False:
@@ -409,7 +410,7 @@ class KalshiClient(BaseClient):
             currency=Currency.USD,
         )
 
-    async def get_trades(  # type: ignore[override]
+    async def get_trades(
         self,
         outcome_id: str,
         limit: int = 100,
@@ -429,7 +430,12 @@ class KalshiClient(BaseClient):
 
         Yields:
             Trade objects (up to `limit` total)
+
+        Raises:
+            ValueError: If limit <= 0
+            TypeError: If an unknown keyword argument is passed
         """
+        validate_limit(limit)
         url = f"{self.API_BASE}/markets/trades"
 
         yielded = 0

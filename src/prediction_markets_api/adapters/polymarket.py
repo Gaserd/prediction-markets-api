@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from dateutil import parser
 
-from prediction_markets_api.adapters.base import BaseClient
+from prediction_markets_api.adapters.base import BaseClient, validate_limit
 from prediction_markets_api.exceptions import (
     NoLiquidityError,
     NotFoundError,
@@ -87,8 +87,9 @@ class PolymarketClient(BaseClient):
             Market objects (up to `limit` total)
 
         Raises:
-            ValueError: If API returns invalid data
+            ValueError: If limit <= 0, or if the API returns invalid data
         """
+        validate_limit(limit)
         url = f"{self.GAMMA_API_BASE}/markets/keyset"
         params: dict[str, Any] = {"limit": min(page_size, 100)}
 
@@ -439,7 +440,7 @@ class PolymarketClient(BaseClient):
             currency=Currency.USDC,
         )
 
-    async def get_trades(  # type: ignore[override]
+    async def get_trades(
         self,
         outcome_id: str,
         limit: int = 100,
@@ -461,7 +462,12 @@ class PolymarketClient(BaseClient):
 
         Yields:
             Trade objects (up to `limit` total)
+
+        Raises:
+            ValueError: If limit <= 0
+            TypeError: If an unknown keyword argument is passed
         """
+        validate_limit(limit)
         url = f"{self.DATA_API_BASE}/trades"
 
         yielded = 0
