@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from prediction_markets_api.adapters.hyperliquid import HyperliquidClient
+from prediction_markets_api.adapters.hyperliquid import HyperliquidClient, coin_from_outcome_id
 from prediction_markets_api.exceptions import (
     NoLiquidityError,
     NotFoundError,
@@ -161,6 +161,54 @@ async def test_list_and_get_market(markets_response, templates_response, mids_re
 
 
 @pytest.mark.asyncio
+async def test_ballon_dor_excludes_untradable_other_fallback(
+    markets_response, templates_response, mids_response, respx_mock
+):
+    """8658 is the tradable Other. Fallback 8656 is a 0.5 mid with no book.
+
+    Listing both as Other pushes the probability sum to about 1.5. The recorded
+    Ballon d'Or question keeps 8658 and drops 8656. Contest and price-bucket
+    fallbacks are the only Other leg and stay.
+    """
+
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        return _route(
+            request,
+            {
+                "outcomeMeta": markets_response,
+                "outcomeTemplates": templates_response,
+                "allMids": mids_response,
+            },
+        )
+
+    respx_mock.post(INFO_URL).mock(side_effect=side_effect)
+    async with HyperliquidClient() as client:
+        markets = [market async for market in client.list_markets(limit=None)]
+        award = next(market for market in markets if "Ballon d'Or" in market.question)
+        fetched = await client.get_market(award.id)
+        contest = next(market for market in markets if market.id == "q503")
+
+    others = [outcome for outcome in award.outcomes if outcome.name == "Other"]
+    assert [outcome.id for outcome in others] == ["#86580"]
+    assert all(outcome.id != "#86560" for outcome in award.outcomes)
+    assert [outcome.id for outcome in fetched.outcomes] == [
+        outcome.id for outcome in award.outcomes
+    ]
+    listed_sum = sum(
+        (outcome.price for outcome in award.outcomes if outcome.price is not None),
+        Decimal("0"),
+    )
+    fallback_mid = Decimal(mids_response["#86560"])
+    assert fallback_mid == Decimal("0.5")
+    assert others[0].price == Decimal(mids_response["#86580"])
+    assert listed_sum < Decimal("1.2")
+    assert listed_sum + fallback_mid > Decimal("1.4")
+    # q503's only Other is its fallback, so that leg stays.
+    assert [outcome.name for outcome in contest.outcomes].count("Other") == 1
+    assert contest.outcomes[-1].id == "#156640"
+
+
+@pytest.mark.asyncio
 async def test_closed_true_makes_no_request(respx_mock):
     route = respx_mock.post(INFO_URL).mock(return_value=httpx.Response(200, json={}))
     async with HyperliquidClient() as client:
@@ -207,6 +255,35 @@ async def test_venue_filter(markets_response, templates_response, mids_response,
     assert filtered
     assert len(filtered) < len(all_markets)
     assert all(market.venue == "hyperliquid" for market in filtered)
+
+
+def test_side_1_coin_keeps_side_digit():
+    """Side 1 is ``10 * outcome + 1``, not ``10 * outcome``."""
+    assert coin_from_outcome_id("16049:1") == "#160491"
+    assert coin_from_outcome_id("16049") == "#160490"
+    assert coin_from_outcome_id("16049:0") == "#160490"
+
+
+@pytest.mark.asyncio
+async def test_order_book_side_1_requests_sided_coin(respx_mock):
+    """A book lookup for side 1 must post ``#160491``, not ``#160490``."""
+    book = {
+        "coin": "#160491",
+        "time": 1760000000000,
+        "levels": [
+            [{"px": "0.41", "sz": "3", "n": 1}],
+            [{"px": "0.59", "sz": "4", "n": 1}],
+        ],
+    }
+    respx_mock.post(INFO_URL).mock(return_value=httpx.Response(200, json=book))
+
+    async with HyperliquidClient() as client:
+        result = await client.get_order_book("16049:1")
+
+    assert result.outcome_id == "16049:1"
+    assert result.bids[0].price == Decimal("0.41")
+    body = json.loads(respx_mock.calls[0].request.content)
+    assert body == {"type": "l2Book", "coin": "#160491"}
 
 
 @pytest.mark.asyncio

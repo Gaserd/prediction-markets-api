@@ -389,6 +389,8 @@ This library is free and open source (MIT). Some links below are **referral link
 | Hyperliquid Outcomes (HIP-4) | [hyperliquid.xyz](https://hyperliquid.xyz) | no | no |  |
 <!-- venues-table:end -->
 
+Hyperliquid Outcomes limits: trades have no pagination (`recentTrades` only), the order book has at most 20 levels per side, and closed markets cannot be listed.
+
 Referral links are defined in `src/prediction_markets_api/venues.py` (the same registry that generates this table), so you can see exactly what is linked and change it in a fork.
 
 Trading and builder-code attribution are not part of 0.9 (read-only). How builder codes will work, what they cost and how to turn them off will be documented here before 1.0.

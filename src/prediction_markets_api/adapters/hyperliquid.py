@@ -812,7 +812,12 @@ def _question_market(
     status = _status_for_end(end, now=now)
     quote: Any = None
     legs: list[Outcome] = []
+    # A named "Other" (awardOther) plus the protocol fallback (also labeled
+    # Other, mid 0.5, no book) would count the same leg twice. Drop the fallback.
+    omit_fallback = _duplicate_other_fallback(question, by_id, fields, templates)
     for leg_id in _question_leg_ids(question):
+        if leg_id == omit_fallback:
+            continue
         raw = by_id.get(leg_id)
         if raw is None:
             continue
@@ -923,6 +928,58 @@ def _side_outcomes(
     return parsed
 
 
+def _duplicate_other_fallback(
+    question: dict[str, Any],
+    by_id: dict[int, dict[str, Any]],
+    parent_fields: dict[str, str],
+    templates: dict[str, dict[str, Any]],
+) -> int | None:
+    """Return a fallback id to omit when a named leg is already ``Other``.
+
+    Award markets (Ballon d'Or) register a tradable ``awardOther`` and a
+    protocol fallback (``template fallback``, description ``other``). Both
+    render as Other. The fallback has no book; ``allMids`` prices it at 0.5,
+    which pushes the outcome probability sum to about 1.5. Contest and
+    price-bucket fallbacks are the only Other leg, so they stay.
+    """
+    fallback_id = question.get("fallbackOutcome")
+    if not isinstance(fallback_id, int):
+        return None
+    fallback = by_id.get(fallback_id)
+    if fallback is None or _leg_label(fallback, parent_fields, templates) != "Other":
+        return None
+    named = question.get("namedOutcomes")
+    if not isinstance(named, list):
+        return None
+    for leg_id in named:
+        if not isinstance(leg_id, int) or leg_id == fallback_id:
+            continue
+        raw = by_id.get(leg_id)
+        if raw is not None and _leg_label(raw, parent_fields, templates) == "Other":
+            return fallback_id
+    return None
+
+
+def _leg_label(
+    outcome: dict[str, Any],
+    parent_fields: dict[str, str],
+    templates: dict[str, dict[str, Any]],
+) -> str:
+    """Display name for one question leg."""
+    outcome_id = outcome.get("outcome")
+    name = str(outcome.get("name") or "")
+    description = outcome.get("description")
+    description_text = description if isinstance(description, str) else None
+    fields = _parse_kv(description_text)
+    if _is_other(name, description_text):
+        return "Other"
+    bucket = _bucket_label(fields, parent_fields)
+    label = bucket or _render_title(name, fields, templates)
+    if not label or label.startswith(_TEMPLATE_PREFIX):
+        return description_text or name or str(outcome_id)
+    return label
+
+
 def _leg_outcome(
     market_id: str,
     outcome: dict[str, Any],
@@ -933,17 +990,7 @@ def _leg_outcome(
     outcome_id = outcome.get("outcome")
     if not isinstance(outcome_id, int):
         raise ValueError("leg outcome id missing")
-    name = str(outcome.get("name") or "")
-    description = outcome.get("description")
-    description_text = description if isinstance(description, str) else None
-    fields = _parse_kv(description_text)
-    if _is_other(name, description_text):
-        label = "Other"
-    else:
-        bucket = _bucket_label(fields, parent_fields)
-        label = bucket or _render_title(name, fields, templates)
-        if not label or label.startswith(_TEMPLATE_PREFIX):
-            label = description_text or name or str(outcome_id)
+    label = _leg_label(outcome, parent_fields, templates)
     coin = _coin(outcome_id, 0)
     mid = mids.get(coin)
     price = _decimal(mid)
