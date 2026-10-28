@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not listable. `recentTrades` returns a single non-paginated window.
   `outcomeMeta` does not include creation time, volume, open interest, or liquidity.
 
+### Fixed
+
+- Hyperliquid question fallbacks with an empty order book no longer take the
+  `allMids` mid (often `0.5`). `Outcome.price` is `None` when that outcome has
+  no order book. One `l2Book` request per priced fallback (side 0) decides
+  this; a fallback that has levels keeps its mid. `raw_price` is `None` when
+  `price` is `None`.
+
 ## [0.9.0] - Unreleased
 
 Read-only pre-release. Market data can be listed, fetched, and normalized across

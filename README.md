@@ -116,6 +116,7 @@ All venues return data through a unified model with strict guarantees:
 
 **Price Normalization:**
 - Prices are normalized to 0..1 probability space (e.g., 0.65 = 65% probability)
+- price is None when the venue has no order book for that outcome
 - Original venue prices preserved in `raw_price` field for reference
 - `OrderSide.BUY` means buying the outcome (get_price returns best ask)
 - `OrderSide.SELL` means selling the outcome (get_price returns best bid)
@@ -283,7 +284,7 @@ All venues return data through a unified model:
 ### Core Types
 
 - **Market**: Question, outcomes, volume, liquidity, timestamps
-- **Outcome**: Individual tradeable token (e.g., "Yes"/"No")
+- **Outcome**: Individual tradeable token (e.g., "Yes"/"No"). price is None when the venue has no order book for that outcome
 - **OrderBook**: Sorted bids/asks, never crossed
 - **Price**: Best executable price for a side
 - **Trade**: Historical trade record
