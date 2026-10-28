@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "prediction-markets-api"
 version = "0.9.0"
-description = "Unified Python client for prediction markets (Polymarket, Kalshi, Limitless)"
+description = "Unified Python client for prediction markets (Polymarket, Kalshi, Limitless, Hyperliquid Outcomes)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Prediction Markets API Contributors"}
 ]
-keywords = ["prediction markets", "polymarket", "kalshi", "limitless", "trading", "api"]
+keywords = ["prediction markets", "polymarket", "kalshi", "limitless", "hyperliquid", "trading", "api"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

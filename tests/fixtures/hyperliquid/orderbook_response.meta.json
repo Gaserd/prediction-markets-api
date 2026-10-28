@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-10-23T09:26:07.571579+00:00",
+  "method": "POST",
+  "url": "https://api.hyperliquid.xyz/info",
+  "request": {
+    "url": "https://api.hyperliquid.xyz/info",
+    "method": "POST",
+    "body": {
+      "type": "l2Book",
+      "coin": "#160490"
+    }
+  },
+  "token_id": "#160490",
+  "market_id": "16049",
+  "description": "l2Book for BTC daily binary outcome 16049 side 0 (#160490)"
+}

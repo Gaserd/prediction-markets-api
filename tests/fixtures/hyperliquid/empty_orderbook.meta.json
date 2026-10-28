@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-10-23T09:26:07.571579+00:00",
+  "method": "POST",
+  "url": "https://api.hyperliquid.xyz/info",
+  "request": {
+    "url": "https://api.hyperliquid.xyz/info",
+    "method": "POST",
+    "body": {
+      "type": "l2Book",
+      "coin": "#152910"
+    }
+  },
+  "token_id": "#152910",
+  "market_id": "15291",
+  "description": "l2Book with no bids or asks for outcome 15291"
+}
