@@ -10,9 +10,11 @@ Endpoints used:
   An empty book still has a mid (often ``0.5``); that mid is not used as the
   outcome price. See ``l2Book`` below.
 - ``l2Book`` — order book for one outcome coin (at most 20 levels per side).
-  Listing and ``get_market`` call this once per priced question fallback
-  (side 0 only; Yes and No share one book). No levels means ``price`` is
-  ``None``.
+  ``list_markets`` and ``get_market`` call this once per priced question
+  fallback (side 0 only; Yes and No share one book), up to 8 calls in flight.
+  Each call has info weight 2. The result is not cached on the client. No
+  levels means ``price`` is ``None``. A failed check (429, 5xx, timeout) also
+  sets that leg's price to ``None`` and does not abort the call.
 - ``recentTrades`` — latest trades for one coin (no cursor; a short window)
 - ``settledOutcome`` — one settled outcome by id
 
@@ -29,9 +31,11 @@ Gaps (see the changelog and the client docstrings):
   liquidity figure. ``created_at`` is the time the record was parsed.
 """
 
+import asyncio
 import logging
 import os
 import re
+import warnings
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -61,6 +65,9 @@ from prediction_markets_api.utils import parse_timestamp
 
 logger = logging.getLogger(__name__)
 
+# Info API: l2Book weight is 2. Cap in-flight checks so a full listing stays
+# near a handful of round trips instead of one request per fallback.
+_L2_IN_FLIGHT = 8
 _HL_TIME = re.compile(r"^\d{8}-\d{4}$")
 _TEMPLATE_PREFIX = "template:"
 # outcomeMeta / l2Book docs: books return at most 20 levels per side.
@@ -316,8 +323,6 @@ class HyperliquidClient(BaseClient):
         self._http_client = httpx.AsyncClient(timeout=timeout)
         self._api_key: str | None = os.getenv("HYPERLIQUID_API_KEY")
         self._templates: dict[str, dict[str, Any]] | None = None
-        # Side-0 coin -> True when l2Book had no bids and no asks.
-        self._no_book: dict[str, bool] = {}
 
     @property
     def _info_url(self) -> str:
@@ -338,10 +343,15 @@ class HyperliquidClient(BaseClient):
 
         Question fallbacks are priced from ``allMids`` only when ``l2Book`` has
         at least one level. An empty book sets that leg's price to ``None``
-        (``allMids`` often reports ``0.5`` with no orders). One ``l2Book`` call
-        is made per priced fallback, on side 0, and only for questions this
-        call yields. The duplicate-Other fallback that is left out of a question
+        (``allMids`` often reports ``0.5`` with no orders). One side-0
+        ``l2Book`` is issued per priced fallback this call yields, at most 8
+        in flight. The check belongs to this call only and is not stored on
+        the client. The duplicate-Other fallback that is left out of a question
         is not requested. Standalone outcomes are not checked here.
+
+        If a book cannot be checked (HTTP 429, 5xx, or a timeout), that leg's
+        price is ``None``. One warning summarises how many legs failed, and
+        the rest of the listing is still returned.
 
         Args:
             closed: ``False`` keeps markets that are still open. ``None`` returns
@@ -357,7 +367,8 @@ class HyperliquidClient(BaseClient):
         Raises:
             ValueError: If ``limit`` is not positive.
             NotImplementedError: If ``closed`` is ``True``.
-            VenueAPIError: If the info API request fails.
+            VenueAPIError: If ``outcomeMeta``, ``outcomeTemplates``, or
+                ``allMids`` fails. A failed fallback ``l2Book`` does not raise.
         """
         validate_limit(limit)
         # page_size is part of the shared signature. outcomeMeta is one snapshot.
@@ -378,16 +389,59 @@ class HyperliquidClient(BaseClient):
 
         templates = await self._load_templates()
         mids = await self._load_mids()
-        async for market in self._iter_markets(
-            outcomes,
+        by_id = _outcomes_by_id(outcomes)
+        selected, grouped, fallback_ids, scan_standalones = _plan_listing(
             questions,
+            by_id,
             templates,
-            mids,
             venue_filter,
             closed=closed,
             limit=limit,
-        ):
+        )
+        states = await self._classify_books(fallback_ids)
+        _warn_unverified_books(_unverified_count(states), stacklevel=3)
+        bookless = _bookless_coins(states)
+        yielded = 0
+        for question in selected:
+            if limit is not None and yielded >= limit:
+                return
+            try:
+                market = _question_market(question, by_id, templates, mids, bookless=bookless)
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.warning(
+                    "Skipping Hyperliquid question %s due to parse error: %s",
+                    question.get("question"),
+                    exc,
+                )
+                continue
+            if closed is False and market.status != MarketStatus.OPEN:
+                continue
             yield market
+            yielded += 1
+
+        if not scan_standalones:
+            return
+        for outcome in outcomes:
+            if limit is not None and yielded >= limit:
+                return
+            outcome_id = outcome.get("outcome")
+            if not isinstance(outcome_id, int) or outcome_id in grouped:
+                continue
+            if not _outcome_matches_venue(outcome, venue_filter):
+                continue
+            try:
+                market = _binary_market(outcome, templates, mids)
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.warning(
+                    "Skipping Hyperliquid outcome %s due to parse error: %s",
+                    outcome_id,
+                    exc,
+                )
+                continue
+            if closed is False and market.status != MarketStatus.OPEN:
+                continue
+            yield market
+            yielded += 1
 
     async def get_market(self, market_id: str) -> Market:
         """Get one market.
@@ -403,11 +457,15 @@ class HyperliquidClient(BaseClient):
         the id does not exist.
 
         A question fallback, or a fallback fetched by its own outcome id, has
-        ``price=None`` when its side-0 book has no levels.
+        ``price=None`` when its side-0 book has no levels or that check fails.
+        The check is one ``l2Book`` for this call and is not cached. A failed
+        check warns once and does not raise.
 
         Raises:
             NotFoundError: If the id is unknown.
-            VenueAPIError: If the info API request fails.
+            VenueAPIError: If ``outcomeMeta``, ``outcomeTemplates``, ``allMids``,
+                or ``settledOutcome`` fails. A failed fallback ``l2Book`` does
+                not raise.
         """
         meta = await self._outcome_meta()
         templates = await self._load_templates()
@@ -427,8 +485,17 @@ class HyperliquidClient(BaseClient):
                     resource_id=market_id,
                 )
             mids = await self._load_mids()
-            bookless = await self._bookless_for_question(question, by_id, templates)
-            return _question_market(question, by_id, templates, mids, bookless=bookless)
+            fallback_id = _priced_fallback_id(question, by_id, templates)
+            question_ids = [fallback_id] if fallback_id is not None else []
+            question_states = await self._classify_books(question_ids)
+            _warn_unverified_books(_unverified_count(question_states), stacklevel=3)
+            return _question_market(
+                question,
+                by_id,
+                templates,
+                mids,
+                bookless=_bookless_coins(question_states),
+            )
 
         outcome_id = _outcome_number(market_id)
         if outcome_id is None:
@@ -441,8 +508,10 @@ class HyperliquidClient(BaseClient):
         if raw is not None:
             mids = await self._load_mids()
             side_bookless: set[str] = set()
-            if outcome_id in _fallback_ids(questions) and await self._lacks_book(outcome_id):
-                side_bookless.add(_coin(outcome_id, 0))
+            if outcome_id in _fallback_ids(questions):
+                side_states = await self._classify_books([outcome_id])
+                _warn_unverified_books(_unverified_count(side_states), stacklevel=3)
+                side_bookless = _bookless_coins(side_states)
             return _binary_market(raw, templates, mids, bookless=side_bookless)
         settled = await self._info({"type": "settledOutcome", "outcome": outcome_id})
         if isinstance(settled, dict) and isinstance(settled.get("spec"), dict):
@@ -688,119 +757,73 @@ class HyperliquidClient(BaseClient):
         data = await self._info({"type": "allMids"})
         return _mids_map(data)
 
-    async def _lacks_book(self, outcome_id: int) -> bool:
-        """Return whether side 0 of ``outcome_id`` has an empty ``l2Book``.
+    async def _classify_books(self, outcome_ids: list[int]) -> dict[int, str]:
+        """Classify side-0 books for this call only.
 
-        Cached on the client. A body that is not an order book does not count
-        as empty and is not cached, so a stand-in payload cannot wipe mids.
-        ``None`` (unknown coin) counts as no book.
+        Values are ``empty``, ``live``, ``unknown``, or ``unverified``. At most
+        ``_L2_IN_FLIGHT`` requests run at once. Ids are deduplicated and the
+        result keeps the first-seen order. Nothing is stored on the client.
+        ``VenueAPIError`` (429, 5xx, timeout) becomes ``unverified``. A body
+        that is not an order book is ``unknown`` and does not clear the mid.
         """
-        coin = _coin(outcome_id, 0)
-        cached = self._no_book.get(coin)
-        if cached is not None:
-            return cached
-        state = _l2_book_state(await self._info({"type": "l2Book", "coin": coin}))
-        if state == "unknown":
-            return False
-        lacks = state == "empty"
-        self._no_book[coin] = lacks
-        return lacks
+        ordered: list[int] = []
+        seen: set[int] = set()
+        for outcome_id in outcome_ids:
+            if outcome_id in seen:
+                continue
+            seen.add(outcome_id)
+            ordered.append(outcome_id)
+        if not ordered:
+            return {}
+        semaphore = asyncio.Semaphore(_L2_IN_FLIGHT)
 
-    async def _bookless_for_question(
-        self,
-        question: dict[str, Any],
-        by_id: dict[int, dict[str, Any]],
-        templates: dict[str, dict[str, Any]],
-    ) -> set[str]:
-        """Side-0 coin of this question's priced fallback, when that book is empty.
+        async def one(outcome_id: int) -> tuple[int, str]:
+            async with semaphore:
+                try:
+                    payload = await self._info({"type": "l2Book", "coin": _coin(outcome_id, 0)})
+                except VenueAPIError:
+                    return outcome_id, "unverified"
+                return outcome_id, _l2_book_state(payload)
 
-        The duplicate-Other fallback is omitted from the question, so it is
-        not requested here.
-        """
-        description = question.get("description")
-        description_text = description if isinstance(description, str) else None
-        fields = _parse_kv(description_text)
-        fallback_id = question.get("fallbackOutcome")
-        if not isinstance(fallback_id, int) or fallback_id not in by_id:
-            return set()
-        if _duplicate_other_fallback(question, by_id, fields, templates) == fallback_id:
-            return set()
-        if await self._lacks_book(fallback_id):
-            return {_coin(fallback_id, 0)}
-        return set()
+        pairs = await asyncio.gather(*(one(outcome_id) for outcome_id in ordered))
+        return dict(pairs)
 
-    async def _iter_markets(
-        self,
-        outcomes: list[dict[str, Any]],
-        questions: list[dict[str, Any]],
-        templates: dict[str, dict[str, Any]],
-        mids: dict[str, str],
-        venue_filter: str | None,
-        *,
-        closed: bool | None,
-        limit: int | None,
-    ) -> AsyncIterator[Market]:
-        """Yield question markets, then standalone outcomes not owned by a question."""
-        by_id: dict[int, dict[str, Any]] = {}
-        for outcome in outcomes:
-            outcome_id = outcome.get("outcome")
-            if isinstance(outcome_id, int):
-                by_id[outcome_id] = outcome
 
-        grouped: set[int] = set()
-        yielded = 0
-        for question in questions:
-            if limit is not None and yielded >= limit:
-                return
-            leg_ids = _question_leg_ids(question)
-            legs = [by_id[leg_id] for leg_id in leg_ids if leg_id in by_id]
-            if venue_filter is not None and not any(
-                _outcome_matches_venue(leg, venue_filter) for leg in legs
-            ):
-                grouped.update(leg_ids)
-                continue
-            grouped.update(leg_ids)
-            if closed is False:
-                description = question.get("description")
-                description_text = description if isinstance(description, str) else None
-                if _status_for_end(_end_date(_parse_kv(description_text))) != MarketStatus.OPEN:
-                    continue
-            bookless = await self._bookless_for_question(question, by_id, templates)
-            try:
-                market = _question_market(question, by_id, templates, mids, bookless=bookless)
-            except (KeyError, ValueError, TypeError) as exc:
-                logger.warning(
-                    "Skipping Hyperliquid question %s due to parse error: %s",
-                    question.get("question"),
-                    exc,
-                )
-                continue
-            if closed is False and market.status != MarketStatus.OPEN:
-                continue
-            yield market
-            yielded += 1
+def _bookless_coins(states: dict[int, str]) -> set[str]:
+    """Side-0 coins whose book is empty or could not be checked."""
+    coins: set[str] = set()
+    for outcome_id, state in states.items():
+        if state in {"empty", "unverified"}:
+            coins.add(_coin(outcome_id, 0))
+    return coins
 
-        for outcome in outcomes:
-            if limit is not None and yielded >= limit:
-                return
-            outcome_id = outcome.get("outcome")
-            if not isinstance(outcome_id, int) or outcome_id in grouped:
-                continue
-            if not _outcome_matches_venue(outcome, venue_filter):
-                continue
-            try:
-                market = _binary_market(outcome, templates, mids)
-            except (KeyError, ValueError, TypeError) as exc:
-                logger.warning(
-                    "Skipping Hyperliquid outcome %s due to parse error: %s",
-                    outcome_id,
-                    exc,
-                )
-                continue
-            if closed is False and market.status != MarketStatus.OPEN:
-                continue
-            yield market
-            yielded += 1
+
+def _unverified_count(states: dict[int, str]) -> int:
+    """How many books this call failed to check."""
+    return sum(1 for state in states.values() if state == "unverified")
+
+
+def _warn_unverified_books(count: int, *, stacklevel: int) -> None:
+    """One warning per call when some fallback books could not be checked.
+
+    ``stacklevel`` is forwarded to ``warnings.warn``. Callers pass 3 so the
+    warning points at the user of ``list_markets`` / ``get_market``.
+    """
+    if count <= 0:
+        return
+    noun = "leg" if count == 1 else "legs"
+    message = f"Hyperliquid l2Book check failed for {count} fallback {noun}; those prices are None"
+    logger.warning(message)
+    warnings.warn(message, UserWarning, stacklevel=stacklevel)
+
+
+def _outcomes_by_id(outcomes: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    by_id: dict[int, dict[str, Any]] = {}
+    for outcome in outcomes:
+        outcome_id = outcome.get("outcome")
+        if isinstance(outcome_id, int):
+            by_id[outcome_id] = outcome
+    return by_id
 
 
 def _venue_filter(venue_params: dict[str, Any] | None) -> str | None:
@@ -829,6 +852,71 @@ def _question_leg_ids(question: dict[str, Any]) -> list[int]:
     if isinstance(fallback, int):
         legs.append(fallback)
     return legs
+
+
+def _priced_fallback_id(
+    question: dict[str, Any],
+    by_id: dict[int, dict[str, Any]],
+    templates: dict[str, dict[str, Any]],
+) -> int | None:
+    """Fallback this question prices, or None when that leg is omitted.
+
+    The duplicate-Other fallback is left out of the question, so its book is
+    not requested from a question listing or ``get_market`` of the question.
+    """
+    description = question.get("description")
+    description_text = description if isinstance(description, str) else None
+    fields = _parse_kv(description_text)
+    fallback_id = question.get("fallbackOutcome")
+    if not isinstance(fallback_id, int) or fallback_id not in by_id:
+        return None
+    if _duplicate_other_fallback(question, by_id, fields, templates) == fallback_id:
+        return None
+    return fallback_id
+
+
+def _plan_listing(
+    questions: list[dict[str, Any]],
+    by_id: dict[int, dict[str, Any]],
+    templates: dict[str, dict[str, Any]],
+    venue_filter: str | None,
+    *,
+    closed: bool | None,
+    limit: int | None,
+) -> tuple[list[dict[str, Any]], set[int], list[int], bool]:
+    """Questions this call will try to yield, plus whether to scan standalones.
+
+    Hitting ``limit`` stops the question loop. Legs of questions that were
+    not visited must not come back as binaries, so the standalone scan is
+    skipped in that case. Venue-filtered and already-expired questions are
+    grouped and do not spend an ``l2Book`` call.
+    """
+    grouped: set[int] = set()
+    selected: list[dict[str, Any]] = []
+    fallback_ids: list[int] = []
+    stopped_early = False
+    for question in questions:
+        if limit is not None and len(selected) >= limit:
+            stopped_early = True
+            break
+        leg_ids = _question_leg_ids(question)
+        legs = [by_id[leg_id] for leg_id in leg_ids if leg_id in by_id]
+        if venue_filter is not None and not any(
+            _outcome_matches_venue(leg, venue_filter) for leg in legs
+        ):
+            grouped.update(leg_ids)
+            continue
+        grouped.update(leg_ids)
+        if closed is False:
+            description = question.get("description")
+            description_text = description if isinstance(description, str) else None
+            if _status_for_end(_end_date(_parse_kv(description_text))) != MarketStatus.OPEN:
+                continue
+        selected.append(question)
+        fallback_id = _priced_fallback_id(question, by_id, templates)
+        if fallback_id is not None:
+            fallback_ids.append(fallback_id)
+    return selected, grouped, fallback_ids, not stopped_early
 
 
 def _status_for_end(end_date: datetime | None, *, now: datetime | None = None) -> MarketStatus:

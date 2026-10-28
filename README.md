@@ -116,7 +116,7 @@ All venues return data through a unified model with strict guarantees:
 
 **Price Normalization:**
 - Prices are normalized to 0..1 probability space (e.g., 0.65 = 65% probability)
-- price is None when the venue has no order book for that outcome
+- price is None when the venue has no order book for that outcome. This is guaranteed only for outcomes whose adapter checks the book, which is currently Hyperliquid fallback outcomes.
 - Original venue prices preserved in `raw_price` field for reference
 - `OrderSide.BUY` means buying the outcome (get_price returns best ask)
 - `OrderSide.SELL` means selling the outcome (get_price returns best bid)
@@ -172,7 +172,7 @@ All venues return data through a unified model with strict guarantees:
   - This minimizes false positives from markets trading near certainty but not yet formally resolved
   - Winning outcome automatically detected from settled prices
 - Limitless only exposes `FUNDED` markets via `/markets/active` endpoint. Calling `list_markets(closed=True)` raises `NotImplementedError` with a clear explanation, since the API does not provide an endpoint for closed/resolved markets.
-- Hyperliquid Outcomes lists live markets from `outcomeMeta` only. `list_markets(closed=True)` raises `NotImplementedError`. A single settled outcome can still be loaded with `get_market` when its numeric id is known (`settledOutcome`). `recentTrades` is one short window with no cursor, and `l2Book` returns at most 20 levels per side.
+- Hyperliquid Outcomes lists live markets from `outcomeMeta` only. `list_markets(closed=True)` raises `NotImplementedError`. A single settled outcome can still be loaded with `get_market` when its numeric id is known (`settledOutcome`). `recentTrades` is one short window with no cursor, and `l2Book` returns at most 20 levels per side. `price` is `None` for a fallback outcome only after this adapter checks that outcome's book.
 
 ### Adapter Architecture
 
@@ -284,7 +284,7 @@ All venues return data through a unified model:
 ### Core Types
 
 - **Market**: Question, outcomes, volume, liquidity, timestamps
-- **Outcome**: Individual tradeable token (e.g., "Yes"/"No"). price is None when the venue has no order book for that outcome
+- **Outcome**: Individual tradeable token (e.g., "Yes"/"No"). price is None when the venue has no order book for that outcome. This is guaranteed only for outcomes whose adapter checks the book, which is currently Hyperliquid fallback outcomes.
 - **OrderBook**: Sorted bids/asks, never crossed
 - **Price**: Best executable price for a side
 - **Trade**: Historical trade record
@@ -390,7 +390,7 @@ This library is free and open source (MIT). Some links below are **referral link
 | Hyperliquid Outcomes (HIP-4) | [hyperliquid.xyz](https://hyperliquid.xyz) | no | no |  |
 <!-- venues-table:end -->
 
-Hyperliquid Outcomes limits: trades have no pagination (`recentTrades` only), the order book has at most 20 levels per side, and closed markets cannot be listed.
+Hyperliquid Outcomes limits: trades have no pagination (`recentTrades` only), the order book has at most 20 levels per side, and closed markets cannot be listed. Each `list_markets` or `get_market` call also sends one side-0 `l2Book` per priced question fallback (info weight 2). Those checks run at most 8 at a time and are not cached on the client. A live snapshot on 2026-10-28 was 34 calls (68 weight) on top of `outcomeMeta` (weight 20), `outcomeTemplates` (weight 20), and `allMids` (weight 2). The recorded fixture asks for 25, because fallback 8656 is omitted from its question. An empty book sets that leg's `price` to `None` instead of the `0.5` `allMids` mid. If a check fails (429, 5xx, or timeout), that leg's `price` is `None`, one warning is emitted, and the listing continues.
 
 Referral links are defined in `src/prediction_markets_api/venues.py` (the same registry that generates this table), so you can see exactly what is linked and change it in a fork.
 

@@ -24,9 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Hyperliquid question fallbacks with an empty order book no longer take the
   `allMids` mid (often `0.5`). `Outcome.price` is `None` when that outcome has
-  no order book. One `l2Book` request per priced fallback (side 0) decides
-  this; a fallback that has levels keeps its mid. `raw_price` is `None` when
-  `price` is `None`.
+  no order book. This is guaranteed only for outcomes whose adapter checks the
+  book, which is currently Hyperliquid fallback outcomes. Each `list_markets`
+  or `get_market` call checks those books with side-0 `l2Book` requests (info
+  weight 2), at most 8 in flight, and does not keep the result on the client.
+  A failed check (429, 5xx, timeout) sets that leg's price to `None`, emits one
+  warning, and does not abort the listing. A fallback that has levels keeps its
+  mid. `raw_price` is `None` when `price` is `None`.
+- Hyperliquid unit tests pin `datetime.now` to the fixture snapshot
+  (2026-10-23) so the recorded BTC daily, which expires 2026-10-24 06:00 UTC,
+  stays open.
 
 ## [0.9.0] - Unreleased
 

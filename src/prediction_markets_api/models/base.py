@@ -41,7 +41,9 @@ class Outcome(BaseModel):
 
     Example: "Yes" and "No" for a binary market.
 
-    price is None when the venue has no order book for that outcome.
+    price is None when the venue has no order book for that outcome. This is
+    guaranteed only for outcomes whose adapter checks the book, which is
+    currently Hyperliquid fallback outcomes.
     """
 
     id: str = Field(description="Venue-specific outcome identifier")
@@ -51,7 +53,9 @@ class Outcome(BaseModel):
         None,
         description=(
             "Current price normalized to 0..1 probability. "
-            "price is None when the venue has no order book for that outcome"
+            "price is None when the venue has no order book for that outcome. "
+            "This is guaranteed only for outcomes whose adapter checks the book, "
+            "which is currently Hyperliquid fallback outcomes."
         ),
         ge=Decimal("0"),
         le=Decimal("1"),
