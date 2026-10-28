@@ -946,3 +946,142 @@ async def test_l2book_checks_stay_within_eight_in_flight(
     question_ids = [f"q{row['question']}" for row in markets_response["questions"]]
     assert [market.id for market in markets if market.id.startswith("q")] == question_ids
     assert [market.id for market in again] == [market.id for market in markets]
+
+
+def _spec_outcome(outcome_id: int, name: str) -> dict:
+    return {
+        "outcome": outcome_id,
+        "name": name,
+        "description": "team",
+        "sideSpecs": [{"name": "Yes"}, {"name": "No"}],
+        "quoteToken": "USDC",
+    }
+
+
+def _spec_question(question_id: object, named: int, fallback: int) -> dict:
+    return {
+        "question": question_id,
+        "name": f"Question {question_id}",
+        "description": "match",
+        "namedOutcomes": [named],
+        "fallbackOutcome": fallback,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [1, 2, 3])
+async def test_limit_skips_unparseable_question(respx_mock, limit):
+    """A question that cannot be parsed does not consume a limit slot.
+
+    The broken question is the first one, so it sits inside the window for
+    limit 1, 2, and 3. Each call still returns that many later markets.
+    """
+    good = [
+        _spec_question(10, 10, 100),
+        _spec_question(11, 11, 110),
+        _spec_question(12, 12, 120),
+        _spec_question(13, 13, 130),
+    ]
+    broken = _spec_question("broken", 1, 2)
+    outcomes = [_spec_outcome(1, "Leak"), _spec_outcome(2, "Leak fallback")]
+    for question in good:
+        named = question["namedOutcomes"][0]
+        outcomes.append(_spec_outcome(named, f"Named {named}"))
+        outcomes.append(_spec_outcome(question["fallbackOutcome"], f"Fallback {named}"))
+    outcomes.append(_spec_outcome(999, "Standalone"))
+    payload = {"outcomes": outcomes, "questions": [broken, *good]}
+    books = {
+        f"#{10 * question['fallbackOutcome']}": {
+            "coin": f"#{10 * question['fallbackOutcome']}",
+            "time": 1,
+            "levels": [[], []],
+        }
+        for question in good
+    }
+
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        return _route(
+            request,
+            {
+                "outcomeMeta": payload,
+                "outcomeTemplates": [],
+                "allMids": {},
+                "l2Book": books,
+            },
+        )
+
+    route = respx_mock.post(INFO_URL).mock(side_effect=side_effect)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        async with HyperliquidClient() as client:
+            markets = [market async for market in client.list_markets(limit=limit)]
+
+    expected = [f"q{question['question']}" for question in good[:limit]]
+    assert [market.id for market in markets] == expected
+    assert len(markets) == limit
+    assert all(market.id != "999" for market in markets)
+    l2_coins = [
+        body["coin"] for body in _info_bodies(list(route.calls)) if body["type"] == "l2Book"
+    ]
+    assert l2_coins == [f"#{10 * question['fallbackOutcome']}" for question in good[:limit]]
+
+
+@pytest.mark.asyncio
+async def test_l2book_404_prices_that_leg_none_and_finishes(
+    markets_response, templates_response, mids_response, respx_mock, caplog
+):
+    """A 404 on one fallback book is a failed check, not a missing market.
+
+    That leg is None, the question's other legs keep their mids, one warning
+    names the single failure, and every other fallback book is still requested.
+    """
+    books = _empty_l2_books(markets_response)
+    failed = "#152910"
+    assert failed in books
+    seen: list[str] = []
+
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("type") == "l2Book":
+            coin = body.get("coin")
+            if isinstance(coin, str):
+                seen.append(coin)
+            if coin == failed:
+                return httpx.Response(404, json={"error": "not found"})
+            if isinstance(coin, str) and coin in books:
+                return httpx.Response(200, json=books[coin])
+            return httpx.Response(500, json={"error": f"unexpected l2Book {coin}"})
+        return _route(
+            request,
+            {
+                "outcomeMeta": markets_response,
+                "outcomeTemplates": templates_response,
+                "allMids": mids_response,
+            },
+        )
+
+    respx_mock.post(INFO_URL).mock(side_effect=side_effect)
+    caplog.set_level(logging.WARNING)
+    with pytest.warns(UserWarning, match="1 fallback leg") as caught:
+        async with HyperliquidClient() as client:
+            markets = [market async for market in client.list_markets()]
+
+    assert len(caught) == 1
+    assert "1 fallback leg" in caplog.text
+    question = next(market for market in markets if market.id == "q490")
+    fallback = _outcome(question, failed)
+    assert fallback.price is None
+    assert fallback.raw_price is None
+    others = [outcome for outcome in question.outcomes if outcome.id != failed]
+    assert others
+    assert all(outcome.price is not None for outcome in others)
+    priced = {
+        f"#{10 * row['fallbackOutcome']}"
+        for row in markets_response["questions"]
+        if row["fallbackOutcome"] != 8656
+    }
+    assert seen.count(failed) == 1
+    assert set(seen) == priced
+    assert len(seen) == len(priced)
+    question_ids = [f"q{row['question']}" for row in markets_response["questions"]]
+    assert [market.id for market in markets if market.id.startswith("q")] == question_ids

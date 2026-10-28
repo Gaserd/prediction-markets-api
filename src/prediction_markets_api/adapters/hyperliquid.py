@@ -13,8 +13,8 @@ Endpoints used:
   ``list_markets`` and ``get_market`` call this once per priced question
   fallback (side 0 only; Yes and No share one book), up to 8 calls in flight.
   Each call has info weight 2. The result is not cached on the client. No
-  levels means ``price`` is ``None``. A failed check (429, 5xx, timeout) also
-  sets that leg's price to ``None`` and does not abort the call.
+  levels means ``price`` is ``None``. A failed check (404, 429, 5xx, timeout)
+  also sets that leg's price to ``None`` and does not abort the call.
 - ``recentTrades`` — latest trades for one coin (no cursor; a short window)
 - ``settledOutcome`` — one settled outcome by id
 
@@ -349,9 +349,10 @@ class HyperliquidClient(BaseClient):
         the client. The duplicate-Other fallback that is left out of a question
         is not requested. Standalone outcomes are not checked here.
 
-        If a book cannot be checked (HTTP 429, 5xx, or a timeout), that leg's
-        price is ``None``. One warning summarises how many legs failed, and
-        the rest of the listing is still returned.
+        If a book cannot be checked (HTTP 404, 429, 5xx, or a timeout), that
+        leg's price is ``None``. One warning summarises how many legs failed,
+        and the rest of the listing is still returned. A question that cannot
+        be parsed does not use up a ``limit`` slot.
 
         Args:
             closed: ``False`` keeps markets that are still open. ``None`` returns
@@ -394,6 +395,7 @@ class HyperliquidClient(BaseClient):
             questions,
             by_id,
             templates,
+            mids,
             venue_filter,
             closed=closed,
             limit=limit,
@@ -763,8 +765,9 @@ class HyperliquidClient(BaseClient):
         Values are ``empty``, ``live``, ``unknown``, or ``unverified``. At most
         ``_L2_IN_FLIGHT`` requests run at once. Ids are deduplicated and the
         result keeps the first-seen order. Nothing is stored on the client.
-        ``VenueAPIError`` (429, 5xx, timeout) becomes ``unverified``. A body
-        that is not an order book is ``unknown`` and does not clear the mid.
+        ``VenueAPIError`` (429, 5xx, timeout) and ``NotFoundError`` (404) become
+        ``unverified``. Other books in the same call still run. A body that is
+        not an order book is ``unknown`` and does not clear the mid.
         """
         ordered: list[int] = []
         seen: set[int] = set()
@@ -781,7 +784,7 @@ class HyperliquidClient(BaseClient):
             async with semaphore:
                 try:
                     payload = await self._info({"type": "l2Book", "coin": _coin(outcome_id, 0)})
-                except VenueAPIError:
+                except (VenueAPIError, NotFoundError):
                     return outcome_id, "unverified"
                 return outcome_id, _l2_book_state(payload)
 
@@ -879,6 +882,7 @@ def _plan_listing(
     questions: list[dict[str, Any]],
     by_id: dict[int, dict[str, Any]],
     templates: dict[str, dict[str, Any]],
+    mids: dict[str, str],
     venue_filter: str | None,
     *,
     closed: bool | None,
@@ -886,10 +890,11 @@ def _plan_listing(
 ) -> tuple[list[dict[str, Any]], set[int], list[int], bool]:
     """Questions this call will try to yield, plus whether to scan standalones.
 
-    Hitting ``limit`` stops the question loop. Legs of questions that were
-    not visited must not come back as binaries, so the standalone scan is
-    skipped in that case. Venue-filtered and already-expired questions are
-    grouped and do not spend an ``l2Book`` call.
+    Hitting ``limit`` stops the question loop. Only a question that parses
+    counts toward that limit, so a broken question does not shrink the page.
+    Legs of questions that were not visited must not come back as binaries,
+    so the standalone scan is skipped in that case. Venue-filtered and
+    already-expired questions are grouped and do not spend an ``l2Book`` call.
     """
     grouped: set[int] = set()
     selected: list[dict[str, Any]] = []
@@ -912,6 +917,15 @@ def _plan_listing(
             description_text = description if isinstance(description, str) else None
             if _status_for_end(_end_date(_parse_kv(description_text))) != MarketStatus.OPEN:
                 continue
+        try:
+            _question_market(question, by_id, templates, mids)
+        except (KeyError, ValueError, TypeError) as exc:
+            logger.warning(
+                "Skipping Hyperliquid question %s due to parse error: %s",
+                question.get("question"),
+                exc,
+            )
+            continue
         selected.append(question)
         fallback_id = _priced_fallback_id(question, by_id, templates)
         if fallback_id is not None:
