@@ -139,22 +139,24 @@ async def test_categorical_parent_has_child_outcomes_and_no_bare_book(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _client(monkeypatch)
-    missing = _load("error_not_found")
     detail = _load("categorical_detail")
     parent = detail["result"]["data"]
-    parent_id = str(parent["marketId"])
+    venue_id = str(parent["marketId"])
+    library_id = f"categorical-{venue_id}"
     with respx.mock:
-        respx.get(url__regex=rf".*/openapi/market/{parent_id}$").mock(
-            return_value=Response(200, json=missing)
+        binary_route = respx.get(url__regex=rf".*/openapi/market/{venue_id}$").mock(
+            return_value=Response(200, json=_load("overlap_binary"))
         )
-        respx.get(url__regex=rf".*/openapi/market/categorical/{parent_id}$").mock(
+        respx.get(url__regex=rf".*/openapi/market/categorical/{venue_id}$").mock(
             return_value=Response(200, json=detail)
         )
-        market = await client.get_market(parent_id)
+        market = await client.get_market(library_id)
         with pytest.raises(NotFoundError, match="outcome id"):
-            await client.get_order_book(parent_id)
+            await client.get_order_book(library_id)
+        assert binary_route.call_count == 0
     await client.close()
-    assert market.id == parent_id
+    assert market.id == library_id
+    assert market.raw_data["marketId"] == parent["marketId"]
     # Detail statusEnum stays on venue_status. Normalized OPEN/CLOSED follows
     # the children and cutoff, which is covered with synthetic payloads so the
     # recorded cutoff (2026-10-30) does not pin the assertion.
@@ -163,7 +165,8 @@ async def test_categorical_parent_has_child_outcomes_and_no_bare_book(
     assert len(market.outcomes) == len(children) * 2
     first = children[0]
     assert market.outcomes[0].name == f"{first['marketTitle']}: {first['yesLabel']}"
-    assert market.outcomes[0].id == f"{parent_id}:{first['yesTokenId']}"
+    assert market.outcomes[0].id == f"{library_id}:{first['yesTokenId']}"
+    assert market.outcomes[0].market_id == library_id
 
 
 @pytest.mark.asyncio
@@ -236,14 +239,17 @@ async def test_http_401_and_unknown_market(monkeypatch: pytest.MonkeyPatch) -> N
         assert caught.value.hint is not None
         assert "OPINION_API_KEY" not in caught.value.hint
         assert "OPINION_API_KEY" not in str(caught.value)
-        respx.get(url__regex=r".*/openapi/market/999999999$").mock(
+        binary_route = respx.get(url__regex=r".*/openapi/market/999999999$").mock(
             return_value=Response(200, json=_load("error_not_found"))
         )
-        respx.get(url__regex=r".*/openapi/market/categorical/999999999$").mock(
-            return_value=Response(200, json=_load("error_not_found"))
+        categorical_route = respx.get(url__regex=r".*/openapi/market/categorical/999999999$").mock(
+            return_value=Response(200, json=_load("categorical_not_found"))
         )
-        with pytest.raises(NotFoundError, match="999999999"):
+        with pytest.raises(NotFoundError, match="categorical-999999999") as missing:
             await client.get_market("999999999")
+        assert binary_route.call_count == 1
+        assert categorical_route.call_count == 0
+        assert "Categorical parents use categorical-999999999" in str(missing.value)
     await client.close()
 
 
@@ -251,14 +257,15 @@ async def test_http_401_and_unknown_market(monkeypatch: pytest.MonkeyPatch) -> N
 async def test_categorical_null_data_is_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     with respx.mock:
-        respx.get(url__regex=r".*/openapi/market/999999999$").mock(
-            return_value=Response(200, json=_load("error_not_found"))
+        binary_route = respx.get(url__regex=r".*/openapi/market/999999999$").mock(
+            return_value=Response(200, json=_load("overlap_binary"))
         )
         respx.get(url__regex=r".*/openapi/market/categorical/999999999$").mock(
             return_value=Response(200, json=_load("categorical_not_found"))
         )
-        with pytest.raises(NotFoundError, match="999999999") as caught:
-            await client.get_market("999999999")
+        with pytest.raises(NotFoundError, match="categorical-999999999") as caught:
+            await client.get_market("categorical-999999999")
+        assert binary_route.call_count == 0
     await client.close()
     assert not isinstance(caught.value, VenueAPIError)
 
@@ -616,16 +623,20 @@ async def test_categorical_parent_status_matches_on_list_and_get(
         respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
             return_value=Response(200, json=_page([listed]))
         )
-        respx.get(url__regex=r".*/openapi/market/3825$").mock(
+        binary_route = respx.get(url__regex=r".*/openapi/market/3825$").mock(
             return_value=Response(200, json=missing)
         )
         respx.get(url__regex=r".*/openapi/market/categorical/3825$").mock(
             return_value=Response(200, json={"errno": 0, "errmsg": "", "result": {"data": detail}})
         )
         listed_markets = [market async for market in client.list_markets(closed=False, limit=5)]
-        fetched = await client.get_market("3825")
+        fetched = await client.get_market("categorical-3825")
+        assert binary_route.call_count == 0
     await client.close()
     assert len(listed_markets) == 1
+    assert listed_markets[0].id == "categorical-3825"
+    assert fetched.id == listed_markets[0].id
+    assert fetched.raw_data["marketId"] == 3825
     assert listed_markets[0].status == MarketStatus.OPEN
     assert fetched.status == MarketStatus.OPEN
     assert listed_markets[0].venue_status == "Activated"
@@ -646,20 +657,16 @@ async def test_categorical_parent_closes_when_no_child_is_tradable(
     ]
     listed = _parent(status=2, status_enum="Activated", cutoff=2000000000, children=children)
     detail = _parent(status=1, status_enum="Created", cutoff=2000000000, children=children)
-    missing = _load("error_not_found")
     with respx.mock:
         respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
             return_value=Response(200, json=_page([listed]))
-        )
-        respx.get(url__regex=r".*/openapi/market/3825$").mock(
-            return_value=Response(200, json=missing)
         )
         respx.get(url__regex=r".*/openapi/market/categorical/3825$").mock(
             return_value=Response(200, json={"errno": 0, "errmsg": "", "result": {"data": detail}})
         )
         listed_markets = [market async for market in client.list_markets(closed=None, limit=5)]
         open_only = [market async for market in client.list_markets(closed=False, limit=5)]
-        fetched = await client.get_market("3825")
+        fetched = await client.get_market("categorical-3825")
     await client.close()
     assert listed_markets[0].status == MarketStatus.CLOSED
     assert listed_markets[0].venue_status == "Activated"
@@ -702,4 +709,127 @@ async def test_resolved_categorical_parent_stays_resolved(monkeypatch: pytest.Mo
     assert markets[0].status == MarketStatus.RESOLVED
     assert markets[0].resolved is True
     assert markets[0].venue_status == "Resolved"
+    assert markets[0].id == "categorical-3825"
+    assert markets[0].raw_data["marketId"] == 3825
     assert markets[0].winning_outcome == "child 1: YES"
+
+
+@pytest.mark.asyncio
+async def test_overlapping_binary_and_categorical_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Id 2592 is both a resolved binary and the Fed Decision parent."""
+    client = _client(monkeypatch)
+    binary = _load("overlap_binary")
+    parent = _load("overlap_categorical")
+    parent_raw = parent["result"]["data"]
+    with respx.mock:
+        list_route = respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
+            return_value=Response(200, json=_page([parent_raw]))
+        )
+        binary_route = respx.get(url__regex=r".*/openapi/market/2592$").mock(
+            return_value=Response(200, json=binary)
+        )
+        categorical_route = respx.get(url__regex=r".*/openapi/market/categorical/2592$").mock(
+            return_value=Response(200, json=parent)
+        )
+        listed = [market async for market in client.list_markets(closed=None, limit=5)]
+        fetched = await client.get_market(listed[0].id)
+        bare = await client.get_market("2592")
+    await client.close()
+    assert list_route.call_count == 1
+    assert categorical_route.call_count == 1
+    assert binary_route.call_count == 1
+    assert listed[0].id == "categorical-2592"
+    assert fetched.id == listed[0].id
+    assert fetched.question == listed[0].question == "Fed Decision in October?"
+    assert fetched.status == listed[0].status
+    assert fetched.venue_status == listed[0].venue_status
+    assert fetched.raw_data["marketId"] == 2592
+    assert bare.id == "2592"
+    assert bare.question == "December 31, 2025"
+    assert bare.status == MarketStatus.RESOLVED
+    assert bare.question != fetched.question
+
+
+@pytest.mark.asyncio
+async def test_categorical_outcome_book_uses_the_parent_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(monkeypatch)
+    parent = _load("overlap_categorical")
+    parent_raw = parent["result"]["data"]
+    token = parent_raw["childMarkets"][0]["yesTokenId"]
+    book = {
+        "errno": 0,
+        "errmsg": "",
+        "result": {
+            "bids": [{"price": "0.4", "size": "2"}],
+            "asks": [{"price": "0.6", "size": "3"}],
+            "timestamp": 1700000000000,
+        },
+    }
+    with respx.mock:
+        binary_route = respx.get(url__regex=r".*/openapi/market/2592$").mock(
+            return_value=Response(200, json=_load("overlap_binary"))
+        )
+        categorical_route = respx.get(url__regex=r".*/openapi/market/categorical/2592$").mock(
+            return_value=Response(200, json=parent)
+        )
+        book_route = respx.get(url__regex=r".*/orderbook.*").mock(
+            return_value=Response(200, json=book)
+        )
+        outcome_id = f"categorical-2592:{token}"
+        fetched = await client.get_order_book(outcome_id)
+        price = await client.get_price(outcome_id, OrderSide.BUY)
+        assert categorical_route.call_count == 2
+        assert binary_route.call_count == 0
+        assert book_route.call_count == 2
+        assert book_route.calls[0].request.url.params["token_id"] == token
+    await client.close()
+    assert fetched.market_id == "categorical-2592"
+    assert fetched.outcome_id == outcome_id
+    assert price.price == Decimal("0.6")
+    assert price.market_id == "categorical-2592"
+
+
+@pytest.mark.asyncio
+async def test_parent_with_only_resolved_children_is_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(monkeypatch)
+    first = _child(1, status=4, status_enum="Resolved", cutoff=1)
+    second = _child(2, status=4, status_enum="Resolved", cutoff=1)
+    first["resultTokenId"] = first["yesTokenId"]
+    second["resultTokenId"] = second["yesTokenId"]
+    listed = _parent(status=2, status_enum="Activated", cutoff=1, children=[first, second])
+    with respx.mock:
+        respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
+            return_value=Response(200, json=_page([listed]))
+        )
+        closed = [market async for market in client.list_markets(closed=True, limit=5)]
+        opened = [market async for market in client.list_markets(closed=False, limit=5)]
+    await client.close()
+    assert len(closed) == 1
+    assert opened == []
+    market = closed[0]
+    assert market.id == "categorical-3825"
+    assert market.raw_data["marketId"] == 3825
+    assert market.status == MarketStatus.RESOLVED
+    assert market.resolved is True
+    assert market.venue_status == "Activated"
+    assert market.winning_outcome is None
+
+
+@pytest.mark.asyncio
+async def test_html_5xx_says_non_json_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    with respx.mock:
+        respx.get(url__regex=r".*/openapi/market/7$").mock(
+            return_value=Response(502, text="<html>unavailable</html>")
+        )
+        with pytest.raises(VenueAPIError, match="non-JSON body") as caught:
+            await client.get_market("7")
+    await client.close()
+    message = str(caught.value)
+    assert "HTTP 502" in message
+    assert "Invalid JSON" not in message
+    assert caught.value.status_code == 502

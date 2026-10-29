@@ -1,0 +1,37 @@
+{
+  "errmsg": "",
+  "errno": 0,
+  "result": {
+    "data": {
+      "chainId": "56",
+      "childMarkets": null,
+      "conditionId": "5e095d8230927019217e18e0924b18522511d15dc019ce5e58840d3651d511d4",
+      "coverUrl": "",
+      "createdAt": 1765905895,
+      "cutoffAt": 0,
+      "isResolvableByAI": true,
+      "marketId": 2592,
+      "marketTitle": "December 31, 2025",
+      "marketType": 0,
+      "noLabel": "NO",
+      "noTokenId": "11138109899680876573648906995629265789643063583550485233791132155944078676167",
+      "questionId": "cd69c0b7a3c4959ce4a93ff20e1ddf48faba6a7218e81725b2e9d7fcb888c2a9",
+      "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+      "rebate": {
+        "maker": 0.5
+      },
+      "resolvedAt": 0,
+      "resultTokenId": "11138109899680876573648906995629265789643063583550485233791132155944078676167",
+      "rules": "",
+      "slug": "openai-ipo-by-december-31-2025",
+      "status": 4,
+      "statusEnum": "Resolved",
+      "thumbnailUrl": "https://images.opinion.trade/0x18f63f20eead237c83ff75bb7bd2028006fef79d/0x0626e036742c210292c1d083925cced1c535a317b351bbc1463b69801f248ce1",
+      "volume": "3061168.4695",
+      "volume24h": "45.625",
+      "volume7d": "45.625",
+      "yesLabel": "YES",
+      "yesTokenId": "6059135867880071878220126072279319738283915779009411592158331505001305613812"
+    }
+  }
+}

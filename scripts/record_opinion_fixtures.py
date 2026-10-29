@@ -196,6 +196,23 @@ def main() -> None:
     )
     pause()
 
+    for stem, path, description in (
+        (
+            "overlap_binary",
+            "/market/2592",
+            "Live mainnet GET /openapi/market/2592 (binary sharing id 2592, no API key)",
+        ),
+        (
+            "overlap_categorical",
+            "/market/categorical/2592",
+            "Live mainnet GET /openapi/market/categorical/2592 (parent sharing id 2592, no API key)",
+        ),
+    ):
+        overlap_url = f"{BASE}{path}"
+        status, _headers, overlap = fetch(overlap_url)
+        write(stem, status, overlap_url, overlap, description)
+        pause()
+
     categorical_missing_url = f"{BASE}/market/categorical/999999999"
     status, _headers, categorical_missing = fetch(categorical_missing_url)
     write(

@@ -37,7 +37,7 @@ def generate_venue_table() -> str:
     # Sort venues by wave (defined by their order in the registry)
     venue_items = list(VENUES.items())
 
-    for _key, venue in venue_items:
+    for key, venue in venue_items:
         # Status emoji
         status_emoji = "✅" if venue.status == VenueStatus.IMPLEMENTED else "🚧"
         status_text = f"{status_emoji} {venue.status.value.capitalize()}"
@@ -58,9 +58,13 @@ def generate_venue_table() -> str:
 
         # Plain link from registry (no referral)
         plain_link = f"[Link]({venue.url})"
+        # No VenueInfo field for this. Opinion publishes no public trade tape.
+        name = venue.name
+        if key == "opinion":
+            name = f"{venue.name} (no public trade feed)"
 
         lines.append(
-            f"| {venue.name} | {chain} | {status_text} | {read_icon} | {trade_icon} | "
+            f"| {name} | {chain} | {status_text} | {read_icon} | {trade_icon} | "
             f"{api_read} | {api_trade} | {geo} | {plain_link} |"
         )
 

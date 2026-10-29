@@ -28,10 +28,13 @@ Endpoints used:
   ``venue_params['market_type']`` says otherwise.
 - ``GET /openapi/market/{marketId}`` — one binary market, including a
   categorical child. Unknown ids are HTTP 200 with ``errno`` 10200.
+  Binary and categorical ids are independent and overlap, so this path is
+  used only for a bare numeric library id.
 - ``GET /openapi/market/categorical/{marketId}`` — one categorical parent.
-  ``GET /openapi/market/{parentId}`` returns errno 10200 for those ids. An
-  unknown parent is errno 0 with ``result.data`` null and raises
-  ``NotFoundError``.
+  Library id ``categorical-<id>`` (hyphen, not a colon). An unknown parent
+  is errno 0 with ``result.data`` null, or errno 10200, and raises
+  ``NotFoundError``. This client does not fall back from one path to the
+  other.
 - ``GET /openapi/token/orderbook?token_id=`` — bids and asks for one token.
   Prices are decimal probabilities in ``[0, 1]``. Sizes are share counts.
   This client always requests the YES token. The NO book is derived from
@@ -55,16 +58,26 @@ unknown code logs one warning and leaves ``status`` unset.
 A categorical parent uses the same rule on both the list payload and
 ``GET /openapi/market/categorical/{id}``. Those two payloads can disagree on
 the parent status (list ``Activated``, detail ``Created``). ``Resolved`` on
-the parent stays ``RESOLVED``. Otherwise the parent is ``OPEN`` when at least
+the parent stays ``RESOLVED``. A parent whose children are all ``Resolved``
+is ``RESOLVED`` as well, including when the parent's own status is still
+``Activated``, and ``list_markets(closed=True)`` returns it. ``venue_status``
+stays the raw parent status. Otherwise the parent is ``OPEN`` when at least
 one child is ``Activated`` with a cutoff that is unset or still in the future,
 and the parent's own ``cutoffAt`` is unset or still in the future. Every
-other parent is ``CLOSED``. ``venue_status`` stays the raw parent status.
+other parent is ``CLOSED``.
+
+The library id of a categorical parent is ``categorical-<venue id>``. The
+venue number stays on ``raw_data['marketId']``. A colon would collide with
+outcome ids. Binary markets, including categorical children fetched on their
+own, keep the bare numeric id.
 
 Outcome names are the venue labels (team names, ``YES`` / ``NO``, or anything
-else). Outcome ids are ``{marketId}:{tokenId}``. A bare market id addresses
-the YES-token book of a binary market. A categorical parent has no single
-book. A full outcome id is checked with ``get_market`` before the book
-request.
+else). Outcome ids are ``{library market id}:{tokenId}``. A categorical
+child outcome is ``categorical-<parent id>:<tokenId>``. A bare market id
+addresses the YES-token book of a binary market via ``GET /openapi/market/{id}``
+only. A categorical parent has no single book. A full outcome id is checked
+with ``get_market`` before the book request, so the book uses the same
+endpoint as that market id.
 
 Anonymous rate limit observed 2026-10-29: ``ratelimit-limit: 5`` and
 ``ratelimit-reset: 1`` (5 requests per second per IP). The docs also describe
@@ -110,6 +123,8 @@ logger = logging.getLogger(__name__)
 _PAGE_MAX = 20
 _VENUE = "opinion"
 _NOT_FOUND_ERRNO = 10200
+# Hyphen, not a colon: outcome ids are ``{market id}:{token id}``.
+_CATEGORICAL_PREFIX = "categorical-"
 _NO_PUBLIC_TRADES = (
     "Opinion does not publish a public trade feed. Own-trade history is planned for trading 1.0."
 )
@@ -163,12 +178,39 @@ def _unix(value: Any) -> datetime | None:
         return None
 
 
+def _library_id(venue_id: str, *, categorical: bool) -> str:
+    """Map a venue market number onto the library id.
+
+    Categorical parents are ``categorical-<id>``. Binary markets stay bare.
+    The venue number itself is left on ``raw_data``.
+    """
+    if categorical:
+        return f"{_CATEGORICAL_PREFIX}{venue_id}"
+    return venue_id
+
+
+def _split_library_id(market_id: str) -> tuple[str, bool]:
+    """Return ``(venue id, is_categorical_parent)`` for a library market id."""
+    if market_id.startswith(_CATEGORICAL_PREFIX):
+        venue_id = market_id[len(_CATEGORICAL_PREFIX) :]
+        if not venue_id:
+            raise NotFoundError(
+                f"Market not found: {market_id}",
+                resource_type="market",
+                resource_id=market_id,
+            )
+        return venue_id, True
+    return market_id, False
+
+
 def _parse_outcome_id(outcome_id: str) -> tuple[str, str | None]:
     """Split ``{market_id}`` or ``{market_id}:{token_id}``.
 
-    A bare market id addresses the YES-token book of a binary market and every
-    fill on that market. Token ids are decimal strings and do not contain
-    colons.
+    The market id may be ``categorical-<id>``. The separator is the first
+    colon. Token ids are decimal strings and do not contain colons, so the
+    prefix hyphen does not split the id. A bare numeric id addresses the
+    YES-token book of a binary market. ``categorical-<id>`` addresses the
+    parent and has no single book.
     """
     if not outcome_id or not outcome_id.strip():
         raise ValueError("outcome id must not be empty")
@@ -249,23 +291,32 @@ def _child_tradable(child: dict[str, Any]) -> bool:
 def _categorical_flags(raw: dict[str, Any]) -> tuple[MarketStatus | None, bool, str]:
     """Parent status shared by the list row and the categorical detail.
 
-    ``Resolved`` stays ``RESOLVED`` so a resolved parent still satisfies the
-    resolved invariant and ``closed=True``. Otherwise the parent is ``OPEN``
-    when at least one child is tradable and the parent's own ``cutoffAt`` is
-    unset or still in the future. ``venue_status`` is the raw parent status.
-    List ``Activated`` and detail ``Created`` can differ; the normalized
-    status does not.
+    ``Resolved`` on the parent stays ``RESOLVED``. A parent whose children are
+    all ``Resolved`` is ``RESOLVED`` too, even when the parent's own status is
+    ``Activated``, so ``closed=True`` returns it. ``venue_status`` stays the
+    raw parent status. Otherwise the parent is ``OPEN`` when at least one
+    child is tradable and the parent's own ``cutoffAt`` is unset or still in
+    the future. List ``Activated`` and detail ``Created`` can differ; the
+    normalized status does not.
     """
     status, resolved, venue_status = _status(raw)
     if status == MarketStatus.RESOLVED:
         return status, resolved, venue_status
     children = raw.get("childMarkets")
-    tradable = False
+    child_rows: list[dict[str, Any]] = []
     if isinstance(children, list):
-        tradable = any(isinstance(child, dict) and _child_tradable(child) for child in children)
+        child_rows = [child for child in children if isinstance(child, dict)]
+    if child_rows and all(_child_is_resolved(child) for child in child_rows):
+        return MarketStatus.RESOLVED, True, venue_status
+    tradable = any(_child_tradable(child) for child in child_rows)
     if tradable and not _cutoff_in_past(raw.get("cutoffAt")):
         return MarketStatus.OPEN, False, venue_status
     return MarketStatus.CLOSED, False, venue_status
+
+
+def _child_is_resolved(child: dict[str, Any]) -> bool:
+    status, resolved, _venue_status = _status(child)
+    return resolved and status == MarketStatus.RESOLVED
 
 
 def _resolved_price(
@@ -352,8 +403,10 @@ def _parse_market(raw: dict[str, Any]) -> Market:
     market_id_raw = raw.get("marketId")
     if market_id_raw is None or market_id_raw == "":
         raise ValueError("market id missing")
-    market_id = str(market_id_raw)
-    if _is_categorical(raw):
+    venue_id = str(market_id_raw)
+    categorical = _is_categorical(raw)
+    market_id = _library_id(venue_id, categorical=categorical)
+    if categorical:
         status, resolved, venue_status = _categorical_flags(raw)
         outcomes = _categorical_outcomes(market_id, raw)
     else:
@@ -681,16 +734,18 @@ class OpinionClient(BaseClient):
                 return
 
     async def get_market(self, market_id: str) -> Market:
-        """Get one market by id.
+        """Get one market by library id.
 
-        Binary markets and categorical children use ``GET /openapi/market/{id}``.
-        A categorical parent id returns errno 10200 on that path; this client
-        then calls ``GET /openapi/market/categorical/{id}``.
+        A bare id calls only ``GET /openapi/market/{id}`` (binary market or
+        categorical child). ``categorical-<id>`` calls only
+        ``GET /openapi/market/categorical/{id}``. Binary and categorical ids
+        overlap, so this client does not choose the endpoint by errno 10200.
+        A 10200 on a bare id raises ``NotFoundError`` and names
+        ``categorical-<id>``. The venue number stays on ``raw_data``.
 
         Raises:
-            NotFoundError: If the id is empty, the venue reports errno 10200
-                on both paths, or the categorical payload has ``result.data``
-                null.
+            NotFoundError: If the id is empty, the venue reports errno 10200,
+                or the categorical payload has ``result.data`` null.
             AuthenticationError: If the venue rejects the request with HTTP 401.
             VenueAPIError: If the request fails for another reason.
         """
@@ -700,14 +755,28 @@ class OpinionClient(BaseClient):
                 resource_type="market",
                 resource_id=market_id,
             )
-        path = f"/market/{quote(market_id, safe='')}"
+        venue_id, categorical = _split_library_id(market_id)
+        if categorical:
+            path = f"/market/categorical/{quote(venue_id, safe='')}"
+        else:
+            path = f"/market/{quote(venue_id, safe='')}"
         url = f"{self._base_url}{path}"
         try:
             body = await self._request("GET", path)
-        except NotFoundError:
-            body = await self._categorical_market(market_id)
-        market = self._require_market(body, url, market_id)
-        return market
+        except NotFoundError as exc:
+            if categorical:
+                message = f"Market not found: {market_id}"
+            else:
+                message = (
+                    f"Market not found: {market_id}. "
+                    f"Categorical parents use {_CATEGORICAL_PREFIX}{market_id}."
+                )
+            raise NotFoundError(
+                message,
+                resource_type="market",
+                resource_id=market_id,
+            ) from exc
+        return self._require_market(body, url, market_id)
 
     async def get_order_book(self, outcome_id: str) -> OrderBook:
         """Get the order book for one outcome.
@@ -717,10 +786,14 @@ class OpinionClient(BaseClient):
         (``1 - price``, sides swapped) and is not fetched separately.
         ``raw_price`` on an inverted level is the computed probability string,
         not the venue string from the YES level. Outcome names are arbitrary.
-        A bare market id addresses the YES book of a binary market. A
-        categorical parent has no single book. A full outcome id is checked
-        against ``get_market`` before the book request. An empty book is
-        returned as-is. A crossed book raises ``ValueError``.
+        A bare market id addresses the YES book of a binary market and calls
+        only ``GET /openapi/market/{id}``. A categorical parent id
+        ``categorical-<id>`` has no single book and is loaded only from
+        ``GET /openapi/market/categorical/{id}``. Child outcome ids are
+        ``categorical-<parent id>:<tokenId>``; the first colon separates the
+        token, so the book request uses the parent endpoint. ``get_price``
+        uses this same lookup. An empty book is returned as-is. A crossed
+        book raises ``ValueError``.
 
         Raises:
             NotFoundError: If the market or outcome has no book.
@@ -936,23 +1009,19 @@ class OpinionClient(BaseClient):
             ) from exc
         market = self._one_market(raw)
         if market is None or market.id != market_id:
+            hint = ""
+            if (
+                market is not None
+                and not market_id.startswith(_CATEGORICAL_PREFIX)
+                and market.id == f"{_CATEGORICAL_PREFIX}{market_id}"
+            ):
+                hint = f" Categorical parents use {market.id}."
             raise NotFoundError(
-                f"Market not found: {market_id}",
+                f"Market not found: {market_id}.{hint}",
                 resource_type="market",
                 resource_id=market_id,
             )
         return market
-
-    async def _categorical_market(self, market_id: str) -> object:
-        path = f"/market/categorical/{quote(market_id, safe='')}"
-        try:
-            return await self._request("GET", path)
-        except NotFoundError as exc:
-            raise NotFoundError(
-                f"Market not found: {market_id}",
-                resource_type="market",
-                resource_id=market_id,
-            ) from exc
 
     async def _request(
         self,
@@ -991,6 +1060,13 @@ class OpinionClient(BaseClient):
                     venue=_VENUE,
                     url=str(response.request.url),
                     retry_after=_retry_after(response),
+                ) from exc
+            if response.status_code >= 500:
+                raise VenueAPIError(
+                    f"Opinion request failed with HTTP {response.status_code}: non-JSON body",
+                    status_code=response.status_code,
+                    venue=_VENUE,
+                    url=str(response.request.url),
                 ) from exc
             raise VenueAPIError(
                 f"Invalid JSON from Opinion: {exc}",

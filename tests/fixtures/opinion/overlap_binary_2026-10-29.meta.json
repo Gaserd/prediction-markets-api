@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T12:02:15.103961+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market/2592",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market/2592",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet GET /openapi/market/2592 (binary that shares id 2592 with a categorical parent, no API key)"
+}

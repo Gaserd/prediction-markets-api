@@ -26,8 +26,24 @@ async def test_list_and_get_market_live() -> None:
         assert all(market.status == MarketStatus.OPEN for market in markets)
         fetched = await client.get_market(markets[0].id)
         assert fetched.id == markets[0].id
+        assert fetched.question == markets[0].question
         assert fetched.status == markets[0].status
         assert fetched.outcomes
+
+
+@pytest.mark.live
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio
+async def test_overlapping_id_2592_live() -> None:
+    """Binary 2592 and categorical parent 2592 are different markets."""
+    async with OpinionClient() as client:
+        parent = await client.get_market("categorical-2592")
+        binary = await client.get_market("2592")
+        assert parent.id == "categorical-2592"
+        assert parent.raw_data["marketId"] == 2592
+        assert binary.id == "2592"
+        assert binary.raw_data["marketId"] == 2592
+        assert parent.question != binary.question
 
 
 @pytest.mark.live
