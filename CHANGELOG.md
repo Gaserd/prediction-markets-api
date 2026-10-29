@@ -26,7 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a one-sided book; `mark_price` is not used as a stand-in. Optional `is_mece`
   (added 2026-10-28) is kept on `Market.raw_data` only. WebSockets, candles,
   positions, and trading are not implemented. Registry `geo_restrictions` is
-  `US, UK, Russia blocked` (https://app.pascal.trade/terms.pdf).
+  `Restricted by venue ToS: US, UK, Russia (see ToS for the full list)`
+  (https://app.pascal.trade/terms.pdf).
   `GET /api/v1/accounts/{owner}/position-resolutions`
   gained a `symbols` filter of up to 100 symbols on 2026-10-27; positions stay out
   of this release. The docs do not publish a read-request weight; HTTP 429

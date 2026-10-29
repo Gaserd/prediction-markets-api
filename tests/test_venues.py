@@ -70,7 +70,9 @@ def test_pascal_fields():
     assert venue.status == VenueStatus.IMPLEMENTED
     assert venue.liquidity_source is None
     assert venue.api_key_for_read is False
-    assert venue.geo_restrictions == "US, UK, Russia blocked"
+    assert venue.geo_restrictions == (
+        "Restricted by venue ToS: US, UK, Russia (see ToS for the full list)"
+    )
 
 
 def test_hyperliquid_fields():

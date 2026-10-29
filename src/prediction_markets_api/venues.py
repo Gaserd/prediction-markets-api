@@ -143,9 +143,9 @@ VENUES: dict[str, VenueInfo] = {
     "pascal": VenueInfo(
         name="Pascal",
         chain=Chain.SOLANA,
-        # Restricted Jurisdictions include the US, UK, and Russia:
+        # Named here: US, UK, and Russia. The Terms list more jurisdictions:
         # https://app.pascal.trade/terms.pdf
-        geo_restrictions="US, UK, Russia blocked",
+        geo_restrictions=("Restricted by venue ToS: US, UK, Russia (see ToS for the full list)"),
         api_key_for_read=False,
         api_key_for_trade=True,
         can_read=True,

@@ -116,7 +116,7 @@ All venues return data through a unified model with strict guarantees:
 
 **Price Normalization:**
 - Prices are normalized to 0..1 probability space (e.g., 0.65 = 65% probability)
-- price is None when the venue has no order book for that outcome. An empty book is None for Hyperliquid fallback outcomes (after an `l2Book` check). A one-sided book (only a bid or only an ask) is None for Kalshi and Pascal. Pascal does not substitute `mark_price`.
+- price is None when the venue has no order book for that outcome. An empty book is None for Hyperliquid fallback outcomes (after an `l2Book` check). A one-sided book (only a bid or only an ask) is None for Pascal. Pascal does not substitute `mark_price`.
 - Original venue prices preserved in `raw_price` field for reference
 - `OrderSide.BUY` means buying the outcome (get_price returns best ask)
 - `OrderSide.SELL` means selling the outcome (get_price returns best bid)
@@ -224,7 +224,7 @@ Be aware of venue restrictions:
 - **Polymarket**: US users blocked
 - **Kalshi**: US only (CFTC regulated)
 - **Limitless**: No restrictions (planned)
-- **Pascal**: US, UK, and Russia are blocked. See the Terms of Service at https://app.pascal.trade/terms.pdf. The product is in beta.
+- **Pascal**: Restricted by venue ToS: US, UK, Russia (see ToS for the full list). Terms: https://app.pascal.trade/terms.pdf. The product is in beta.
 
 ### Exception Hierarchy
 
@@ -288,7 +288,7 @@ All venues return data through a unified model:
 ### Core Types
 
 - **Market**: Question, outcomes, volume, liquidity, timestamps
-- **Outcome**: Individual tradeable token (e.g., "Yes"/"No"). price is None when the venue has no order book for that outcome. An empty book is None for Hyperliquid fallback outcomes. A one-sided book is None for Kalshi and Pascal.
+- **Outcome**: Individual tradeable token (e.g., "Yes"/"No"). price is None when the venue has no order book for that outcome. An empty book is None for Hyperliquid fallback outcomes. A one-sided book is None for Pascal.
 - **OrderBook**: Sorted bids/asks, never crossed
 - **Price**: Best executable price for a side
 - **Trade**: Historical trade record
@@ -413,7 +413,7 @@ Sign-up links and referral disclosure: see [Venues & referral links](#venues--re
 | Hyperliquid Outcomes (HIP-4) | Hyperliquid | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
 | Predict.fun | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://predict.fun) |
 | Opinion | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://opinion.finance) |
-| Pascal | Solana | ✅ Implemented | ✅ | — | No | Yes | US, UK, Russia blocked | [Link](https://app.pascal.trade) |
+| Pascal | Solana | ✅ Implemented | ✅ | — | No | Yes | Restricted by venue ToS: US, UK, Russia (see ToS for the full list) | [Link](https://app.pascal.trade) |
 | SX Bet | Arbitrum | 🚧 Planned | — | — | No | Yes | None | [Link](https://sx.bet) |
 | Azuro/Bookmaker.xyz | Polygon | 🚧 Planned | — | — | No | Yes | None | [Link](https://azuro.org) |
 | Jupiter Prediction | Solana | 🚧 Planned | — | — | No | Yes | None | [Link](https://jup.ag) |

@@ -43,7 +43,7 @@ class Outcome(BaseModel):
 
     price is None when the venue has no order book for that outcome. An empty
     book is None for Hyperliquid fallback outcomes. A one-sided book (only a
-    bid or only an ask) is None for Kalshi and Pascal.
+    bid or only an ask) is None for Pascal.
     """
 
     id: str = Field(description="Venue-specific outcome identifier")
@@ -55,7 +55,7 @@ class Outcome(BaseModel):
             "Current price normalized to 0..1 probability. "
             "price is None when the venue has no order book for that outcome. "
             "An empty book is None for Hyperliquid fallback outcomes. "
-            "A one-sided book (only a bid or only an ask) is None for Kalshi and Pascal."
+            "A one-sided book (only a bid or only an ask) is None for Pascal."
         ),
         ge=Decimal("0"),
         le=Decimal("1"),
