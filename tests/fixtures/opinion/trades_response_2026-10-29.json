@@ -1,0 +1,22 @@
+{
+  "errno": 0,
+  "errmsg": "",
+  "result": {
+    "total": 1,
+    "list": [
+      {
+        "txHash": "0xabababababababababababababababababababababababababababababababab",
+        "marketId": 7991,
+        "side": "BUY",
+        "outcome": "YES",
+        "outcomeSide": 1,
+        "price": "0.55",
+        "shares": "10",
+        "amount": "5.5",
+        "status": 2,
+        "createdAt": 1700000000,
+        "chainId": "56"
+      }
+    ]
+  }
+}

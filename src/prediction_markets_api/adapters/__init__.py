@@ -4,6 +4,7 @@ from prediction_markets_api.adapters.base import BaseClient
 from prediction_markets_api.adapters.hyperliquid import HyperliquidClient
 from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.limitless import LimitlessClient
+from prediction_markets_api.adapters.opinion import OpinionClient
 from prediction_markets_api.adapters.pascal import PascalClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
 
@@ -18,6 +19,7 @@ __all__ = [
     "KalshiClient",
     "LimitlessClient",
     "HyperliquidClient",
+    "OpinionClient",
     "PascalClient",
     "Predict_funClient",
 ]

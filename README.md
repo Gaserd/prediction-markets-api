@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A unified Python client for prediction markets. Currently supports **Polymarket**, **Kalshi**, **Limitless**, **Hyperliquid Outcomes (HIP-4)**, **Pascal** (Solana, beta), and **Predict.fun** (BNB Chain).
+A unified Python client for prediction markets. Currently supports **Polymarket**, **Kalshi**, **Limitless**, **Hyperliquid Outcomes (HIP-4)**, **Pascal** (Solana, beta), **Predict.fun** (BNB Chain), and **Opinion** (BNB Chain).
 
 ## Features
 
@@ -167,6 +167,10 @@ All venues return data through a unified model with strict guarantees:
 | **Predict.fun** | `REGISTERED`, `PRICE_PROPOSED`, `PRICE_DISPUTED` with trading `OPEN` | `OPEN` | False | `OPEN` means a new order can be placed. `price` is `None` unless both best bid and best ask are present |
 | | `REMOVED`, lifecycle `PAUSED`, or trading `CLOSED`, `PAUSED`, `CANCEL_ONLY`, `MATCHING_NOT_ENABLED` | `CLOSED` | False | Raw lifecycle `status` stays on `venue_status`. Both `status` and `tradingStatus` stay on `raw_data`. `status=OPEN` pages can include these; `list_markets(closed=False)` drops them |
 | | `RESOLVED` | `RESOLVED` | True | Winning outcome price is `1` and the others are `0`. Listed with `status=RESOLVED` |
+| **Opinion** | `Activated` (2) | `OPEN` | False | `OPEN` means a new order can be placed right now. `price` is `None` on a listing (the payload has no best bid or ask) |
+| | `Created` (1), `Resolving` (3), `Failed` (5), `Deleted` (6) | `CLOSED` | False | Raw `statusEnum` stays on `venue_status`. `status` and `statusEnum` stay on `raw_data`. `list_markets(closed=False)` drops these |
+| | `Resolved` (4) | `RESOLVED` | True | Winning outcome price is `1` and the other outcome is `0`. Listed with `status=resolved` |
+| | anything else | unset | False | One warning is logged. The raw status stays on `venue_status` |
 
 **Notes:**
 - Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
@@ -180,6 +184,7 @@ All venues return data through a unified model with strict guarantees:
 - Hyperliquid Outcomes lists live markets from `outcomeMeta` only. `list_markets(closed=True)` raises `NotImplementedError`. A single settled outcome can still be loaded with `get_market` when its numeric id is known (`settledOutcome`). `recentTrades` is one short window with no cursor, and `l2Book` returns at most 20 levels per side. `price` is `None` for a fallback outcome only after this adapter checks that outcome's book.
 - Pascal (beta, Solana) lists unresolved markets from `GET /api/v1/markets` and resolved markets from `GET /api/v1/markets/resolved` (lookback `4h`, `24h`, or `3d` only). See [Pascal](#pascal).
 - Predict.fun (BNB Chain) lists open markets with `GET /v1/markets?status=OPEN` and resolved markets with `status=RESOLVED`. Mainnet reads require `PREDICTFUN_API_KEY`. See [Predict.fun](#predictfun).
+- Opinion (BNB Chain) lists activated markets with `GET /openapi/market?status=activated` and resolved markets with `status=resolved`. Public market, order book, and price reads do not need a key. See [Opinion](#opinion).
 
 ### Adapter Architecture
 
@@ -218,7 +223,7 @@ asyncio.run(main())
 
 ### API Keys and Configuration
 
-**Version 0.9 (Read-Only):** Polymarket, Kalshi, Limitless, Hyperliquid Outcomes, and Pascal serve market data, prices, order books, and trades without an API key. Predict.fun mainnet reads require `PREDICTFUN_API_KEY` (the `x-api-key` header). The public testnet does not.
+**Version 0.9 (Read-Only):** Polymarket, Kalshi, Limitless, Hyperliquid Outcomes, and Pascal serve market data, prices, order books, and trades without an API key. Predict.fun mainnet reads require `PREDICTFUN_API_KEY` (the `x-api-key` header). The public testnet does not. Opinion market, order book, and price reads do not need a key. Opinion user trade history (`GET /openapi/trade`) requires `OPINION_API_KEY` (the `apikey` header).
 
 **Trading (Planned for 1.0):** Will require API keys via environment variables.
 
@@ -230,6 +235,7 @@ Be aware of venue restrictions:
 - **Limitless**: No restrictions (planned)
 - **Pascal**: Restricted by venue ToS: US, UK, Russia (see ToS for the full list). Terms: https://app.pascal.trade/terms.pdf. The product is in beta.
 - **Predict.fun**: Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, Thailand, Australia, Belgium, Taiwan (see ToS for the full list). Terms: https://docs.predict.fun/terms-of-service. Mainnet reads require an API key.
+- **Opinion**: Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, Thailand, South Korea, China, Taiwan, Hong Kong, Iran, Syria, Cuba, North Korea, Crimea, Donetsk, Luhansk (see ToS for the full list). Terms: https://docs.opinion.trade/legal/terms-of-use. Public reads do not need an API key.
 
 ### Exception Hierarchy
 
@@ -265,6 +271,7 @@ from prediction_markets_api import (
 - **`AuthenticationError`**: API key missing or rejected (HTTP 401)
   - Subclass of `VenueAPIError`
   - Predict.fun mainnet raises this when `PREDICTFUN_API_KEY` is unset or the venue rejects the key. The message does not include the key.
+  - Opinion raises this for `GET /openapi/trade` when `OPINION_API_KEY` is unset, and when a configured key is rejected. Public market, order book, and price reads do not need a key. The message does not include the key.
 
 **User Input Errors:**
 - `ValueError`: Invalid parameters (e.g., price not in 0..1, negative size)
@@ -383,6 +390,9 @@ export POLYMARKET_WALLET_ADDRESS="0x..."
 
 # Predict.fun mainnet reads. Testnet does not need this. Never commit the key.
 export PREDICTFUN_API_KEY="your_key"
+
+# Opinion user trade history only. Market, book, and price reads do not need this.
+export OPINION_API_KEY="your_key"
 ```
 
 **Never hardcode API keys in your code.**
@@ -406,6 +416,7 @@ This library is free and open source (MIT). Some links below are **referral link
 | Hyperliquid Outcomes (HIP-4) | [hyperliquid.xyz](https://hyperliquid.xyz) | no | no |  |
 | Pascal | [app.pascal.trade](https://app.pascal.trade) | no | yes |  |
 | Predict.fun | [predict.fun](https://predict.fun) | no | yes |  |
+| Opinion | [opinion.trade](https://opinion.trade) | no | yes |  |
 <!-- venues-table:end -->
 
 Hyperliquid Outcomes limits: trades have no pagination (`recentTrades` only), the order book has at most 20 levels per side, and closed markets cannot be listed. Each `list_markets` or `get_market` call also sends one side-0 `l2Book` per priced question fallback (info weight 2). Those checks run at most 8 at a time and are not cached on the client. A full live listing on 2026-10-28 was 34 `l2Book` calls (weight 68). With `outcomeMeta` (weight 20), `outcomeTemplates` (weight 20), and `allMids` (weight 2) that is weight 110 of the 1200 per minute per IP budget, about 10 full listings a minute. Wall time is around 6 s (about 6.2 s with these checks, about 2.8 s on main). The recorded fixture asks for 25, because fallback 8656 is omitted from its question. An empty book sets that leg's `price` to `None` instead of the `0.5` `allMids` mid. If a check fails (404, 429, 5xx, or timeout), that leg's `price` is `None`, one warning is emitted, and the listing continues.
@@ -427,7 +438,7 @@ Sign-up links and referral disclosure: see [Venues & referral links](#venues--re
 | Limitless | Base | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://limitless.exchange) |
 | Hyperliquid Outcomes (HIP-4) | Hyperliquid | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
 | Predict.fun | BNB Chain | ✅ Implemented | ✅ | — | Yes | Yes | Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, Thailand, Australia, Belgium, Taiwan (see ToS for the full list) | [Link](https://predict.fun) |
-| Opinion | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://opinion.finance) |
+| Opinion | BNB Chain | ✅ Implemented | ✅ | — | No | Yes | Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, Thailand, South Korea, China, Taiwan, Hong Kong, Iran, Syria, Cuba, North Korea, Crimea, Donetsk, Luhansk (see ToS for the full list) | [Link](https://opinion.trade) |
 | Pascal | Solana | ✅ Implemented | ✅ | — | No | Yes | Restricted by venue ToS: US, UK, Russia (see ToS for the full list) | [Link](https://app.pascal.trade) |
 | SX Bet | Arbitrum | 🚧 Planned | — | — | No | Yes | None | [Link](https://sx.bet) |
 | Azuro/Bookmaker.xyz | Polygon | 🚧 Planned | — | — | No | Yes | None | [Link](https://azuro.org) |
@@ -559,6 +570,61 @@ A long testnet walk of `GET /v1/markets` can hit a venue-side HTTP 500 on a deep
 
 Trading (`place_order` validates a dry-run and does not submit), websockets, order placement, and account or position reads.
 
+## Opinion
+
+Opinion (Opinion Labs) is a prediction market on **BNB Chain** (chain id 56). The read client talks to `https://openapi.opinion.trade/openapi`. Docs: [Opinion OpenAPI](https://docs.opinion.trade/developer-guide/opinion-open-api/). Terms: [Terms of Use](https://docs.opinion.trade/legal/terms-of-use). The site is [opinion.trade](https://opinion.trade).
+
+Public market, order book, and price reads do not need an API key. When `OPINION_API_KEY` is set it is sent as the `apikey` header. The key is read only from that environment variable. It is not logged, and `repr` shows `***` when it is set. An invalid key is HTTP 401 and raises `AuthenticationError` with no anonymous fallback. There is no published testnet host.
+
+`GET /openapi/trade` is the API-key owner's filled trades, not a public tape. No public per-market trade history is published (price history is candles and is not used as trades). A missing key raises `AuthenticationError` before that request. The hint names `OPINION_API_KEY`.
+
+### Example
+
+```python
+import asyncio
+
+from prediction_markets_api import OpinionClient
+
+
+async def main():
+    # Market, book, and price reads do not need OPINION_API_KEY.
+    async with OpinionClient() as client:
+        markets = [market async for market in client.list_markets(closed=False, limit=2)]
+        for market in markets:
+            price = market.outcomes[0].price if market.outcomes else None
+            shown = "n/a" if price is None else f"{price:.2%}"
+            print(f"{market.question}: {shown}")
+
+
+asyncio.run(main())
+```
+
+**Supported**
+
+- `list_markets` — `GET /openapi/market`, paged with `page` (starting at 1) and `limit`. The server default for `limit` is 10. Values above 20 are silently clamped to 20. This client sends at most 20. `closed=False` sends `status=activated` and then drops markets that are not `OPEN`. `closed=True` sends `status=resolved`. `closed=None` omits `status`. `marketType` defaults to `2` (all). `limit` stops before the next page. A repeated page stops the iterator and logs one warning. A 5xx raises `VenueAPIError`. The message includes the page number and the cursor, which is that page number, and the listing does not finish as a successful partial result.
+- `venue_params` — `market_type` (`0` binary, `1` categorical, `2` all), `sort_by` (`0`–`8`, sent as `sortBy` only when set), `chain_id` (`chainId`, only when set), and `collection_type` (`0`–`2`, sent as `collectionType` only when set). Any other key raises `ValueError` before the request.
+- `get_market` — `GET /openapi/market/{id}` for a binary market or a categorical child. A categorical parent id returns errno 10200 on that path; this client then calls `GET /openapi/market/categorical/{id}`. Unknown ids raise `NotFoundError`.
+- `get_order_book` / `get_price` — `GET /openapi/token/orderbook?token_id=`. The client requests the YES token. A NO token uses that book with `1 - price` and the sides swapped. Outcome names are the venue labels and are not assumed to be Yes and No. Outcome ids are `{marketId}:{tokenId}`. A bare market id addresses the YES book of a binary market. A categorical parent has no single book. A full id whose token is not on the market raises `NotFoundError` before the book request. An empty side makes `get_price` raise `NoLiquidityError`.
+- `get_trades` / `iter_trades` — `GET /openapi/trade` with `page`, `limit` (max 20), `marketId`, and `chainId=56`. This is the caller's fills. `outcomeSide` `1` is the YES token and `2` is the NO token. Only filled rows (status `2`) are yielded. A full outcome id is checked with `get_market` before any trade request.
+
+**Prices and units**
+
+Book prices are probabilities in `[0, 1]`. Sizes are share counts. `volume` is a decimal string of the quote notional, not an 18-decimal integer. The quote token on chain 56 is USDT. `Market.currency` is `USD` for those notionals. There is no liquidity field (`Market.liquidity` is `None`). List payloads have no best bid or ask, so `Outcome.price` is `None` unless that outcome is resolved (`1` or `0` from `resultTokenId`). `OrderBook.tick_size`, `min_order_size`, and `last_trade_price` are left unset. Live books include prices such as `0.002` and `0.285`, so this client does not invent a tick.
+
+A categorical parent is one `Market`. Each child contributes a YES outcome and a NO outcome, named `{child title}: {label}`.
+
+**Rate limits**
+
+Anonymous reads are 5 requests per second per IP (`ratelimit-limit: 5`, `ratelimit-reset: 1`, observed 2026-10-29). The docs also describe 15 requests per second for an authenticated API consumer. HTTP 429 maps to `RateLimitError`. `Retry-After` is used when present, otherwise `ratelimit-reset` (seconds).
+
+**Known issues**
+
+No testnet host is published. `GET /openapi/market/categorical/3825` reported status `Created` while the market list reported the same id as `Activated` (recorded 2026-10-29). This client maps the payload it received. `GET /openapi/trade` cannot be recorded without an API key; unit tests use a schema-shaped payload, and the success body was not verified live. Whether `chainId` is required on that call was not verified live (the official client sends `56`). Whether status `Resolving` still accepts a new order was not checked with a live order. The OpenAPI document at the host returned HTTP 403 or 404, so wire names follow the official `opinion_api` 0.4.0 client and live responses. An older `opinion_api` docstring swaps `marketType` `0` and `2`; live responses and `opinion-clob-sdk` 0.7.0 use `0` binary, `1` categorical, `2` all.
+
+**Not in this adapter**
+
+Trading (`place_order` validates a dry-run and does not submit), websockets, candles, and account or position reads.
+
 ## Development
 
 ### Setup
@@ -617,9 +683,10 @@ Those checks use recorded API fixtures (no live network calls).
 
 - **Schedule:** every day at 00:00 UTC (03:00 Europe/Moscow).
 - **Manual run:** Actions → Nightly live smoke → Run workflow. The `venues` input takes a comma- or space-separated list (`polymarket, kalshi`). Leave it empty to run every venue.
-- **Jobs:** one matrix job per venue (`polymarket`, `kalshi`, `limitless`, `hyperliquid`, `pascal`, `predict_fun`) on Python 3.13. Each job runs `pytest -m live tests/test_<venue>_live.py`.
+- **Jobs:** one matrix job per venue (`polymarket`, `kalshi`, `limitless`, `hyperliquid`, `pascal`, `predict_fun`, `opinion`) on Python 3.13. Each job runs `pytest -m live tests/test_<venue>_live.py`.
 - **Kalshi** uses the demo Trade API only (`https://external-api.demo.kalshi.co/trade-api/v2`). Public demo reads do not need a key. `KALSHI_API_KEY` and `KALSHI_API_SECRET`, if configured, must be demo credentials; the current live tests do not read them, and a missing pair does not skip the job. The production host is not used.
 - **Secrets:** `PREDICTFUN_API_KEY` for Predict.fun mainnet. When that secret is missing, the job does not call the venue and the summary says `skipped: no key`. Until `tests/test_predict_fun_live.py` exists and collects tests, the `predict_fun` job says `skipped: no live tests` instead.
+- **Opinion** public reads do not need a key, so `required_secrets` is empty and the job runs `tests/test_opinion_live.py`. User trade history needs `OPINION_API_KEY`. That secret is not passed into the smoke job, so the trade-history live test skips.
 - **Failures:** the job opens or comments on one open issue labeled `nightly-smoke` and `venue:<name>`, with the run link, the UTC time, and the failing test names. A later run that actually passes comments and closes that issue.
 
 To add a venue, add one object to the list in the workflow. If it needs a key, set `required_secrets` and pass that secret in the smoke job `env`.

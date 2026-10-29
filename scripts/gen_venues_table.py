@@ -16,7 +16,15 @@ def generate_table() -> str:
         "|---|---|---|---|---|",
     ]
 
-    for venue_key in ["limitless", "polymarket", "kalshi", "hyperliquid", "pascal", "predict_fun"]:
+    for venue_key in [
+        "limitless",
+        "polymarket",
+        "kalshi",
+        "hyperliquid",
+        "pascal",
+        "predict_fun",
+        "opinion",
+    ]:
         venue = VENUES[venue_key]
 
         # Sign up column - use referral link if available, otherwise plain URL

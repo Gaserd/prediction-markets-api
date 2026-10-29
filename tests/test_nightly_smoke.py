@@ -492,6 +492,7 @@ def test_workflow_venue_list_and_boundaries() -> None:
         "hyperliquid",
         "pascal",
         "predict_fun",
+        "opinion",
     ]
     kalshi = next(venue for venue in venues if venue.venue == "kalshi")
     assert kalshi.demo_only is True

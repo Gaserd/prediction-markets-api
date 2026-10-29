@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T11:06:10.610525+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market?page=1&limit=1&status=resolved&marketType=0",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market?page=1&limit=1&status=resolved&marketType=0",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet resolved binary page (no API key)"
+}

@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T11:06:11.137973+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market/999999999",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market/999999999",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet unknown market id (HTTP 200, errno 10200, no API key)"
+}

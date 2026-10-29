@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Read-only **Opinion** adapter (`OpinionClient`, BNB Chain, chain id 56).
+  Public market, order book, and price reads use `https://openapi.opinion.trade/openapi`
+  and do not need a key. `OPINION_API_KEY` is optional on those reads (sent as
+  `apikey` when set), is read only from that environment variable, is not
+  logged, and is masked as `***` in `repr`. An invalid key is HTTP 401 and
+  raises `AuthenticationError` with no anonymous fallback. `GET /openapi/trade`
+  is the caller's fills, not a public tape, and raises `AuthenticationError`
+  before the request when the key is unset. No testnet host is published.
+  Docs: https://docs.opinion.trade/developer-guide/opinion-open-api/. Terms:
+  https://docs.opinion.trade/legal/terms-of-use. `list_markets` uses
+  `GET /openapi/market` (`page` / `limit`; server default 10, silently clamped
+  to 20; this client sends at most 20; `marketType` defaults to `2`).
+  `closed=False` sends `status=activated` and drops markets that are not
+  `OPEN`. Only `Activated` (2) is `OPEN`. `Created`, `Resolving`, `Failed`,
+  and `Deleted` are `CLOSED`. `Resolved` (4) is `RESOLVED`. A 5xx on a later
+  page raises `VenueAPIError` naming that page and cursor. `get_order_book`
+  requests the YES token and derives the NO book as `1 - price` with the sides
+  swapped. Outcome names are the venue labels. A full outcome id is checked
+  with `get_market` before the book or trade request. Quote notionals are
+  USDT and are reported as `USD`. `Market.liquidity` is `None`.
 - Read-only **Predict.fun** adapter (`PredictFunClient`, BNB Chain). Mainnet
   `https://api.predict.fun` requires `PREDICTFUN_API_KEY` (`x-api-key`); the key
   is read only from that environment variable, is not logged, and is masked as

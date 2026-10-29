@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T11:06:09.223859+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market?page=1&limit=1&status=activated&marketType=1",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market?page=1&limit=1&status=activated&marketType=1",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet categorical parent page (no API key)"
+}

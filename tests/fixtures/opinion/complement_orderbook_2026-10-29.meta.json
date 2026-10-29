@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T11:06:08.197906+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/token/orderbook?token_id=94757572192907914605700126551902789631515912963498869181522400252869100259261",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/token/orderbook?token_id=94757572192907914605700126551902789631515912963498869181522400252869100259261",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet NO-token order book for market 7991 (no API key)"
+}
