@@ -1,0 +1,10 @@
+{
+  "status": "error",
+  "data": {
+    "code": "SYMBOL_NOT_FOUND",
+    "message": "symbol not found: symbol=DOES_NOT_EXIST.NOPE"
+  },
+  "seq": "12282489353",
+  "state_time_ms": "1793256930290",
+  "server_time_ms": "1793256930331"
+}

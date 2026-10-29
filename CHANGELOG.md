@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Read-only **Pascal** adapter (`PascalClient`, Solana, beta) on the public data API
+  `https://data.pascal.trade` (no API key). `list_markets` reads `GET /api/v1/markets`
+  (one unresolved snapshot; `limit` is local) and `GET /api/v1/markets/resolved`
+  (lookback `4h` / `24h` / `3d`, `order_by` always sent, API `limit` only 50 / 100 / 200).
+  `venue_params["query"]` calls `POST /api/v1/markets/text-search`. The trimmed query
+  must be 1–32 characters or `list_markets` raises `ValueError` before the request.
+  `order_by` is always sent and defaults to `volume_all_time` (the API default since
+  2026-10-27). Text search is limited to 60 requests per minute per IP and 100 markets.
+  `get_market` uses `POST /api/v1/markets/search`. `get_order_book` / `get_price` use
+  `GET /api/v1/books` (one book per symbol; a single-symbol book may be up to one
+  second old). `get_trades` / `iter_trades` use `GET /api/v1/trades` (`before_cursor`,
+  page size up to 500). A `:short` outcome inverts each print (`1 - long price`,
+  side flipped). A repeated trade cursor stops pagination and logs one warning.
+  `price` is `None` unless both `best_bid` and `best_ask` are present, including
+  a one-sided book; `mark_price` is not used as a stand-in. Optional `is_mece`
+  (added 2026-10-28) is kept on `Market.raw_data` only. WebSockets, candles,
+  positions, and trading are not implemented. Registry `geo_restrictions` is
+  `Restricted by venue ToS: US, UK, Russia (see ToS for the full list)`
+  (https://app.pascal.trade/terms.pdf).
+  `GET /api/v1/accounts/{owner}/position-resolutions`
+  gained a `symbols` filter of up to 100 symbols on 2026-10-27; positions stay out
+  of this release. The docs do not publish a read-request weight; HTTP 429
+  (`RATE_LIMITED`) maps to `RateLimitError`, and `SYMBOL_NOT_FOUND` maps to
+  `NotFoundError`.
+
 - Read-only **Hyperliquid Outcomes (HIP-4)** adapter (`HyperliquidClient`):
   `list_markets`, `get_market`, `get_order_book`, `get_price`, `get_trades`, and
   `iter_trades` on the public `POST https://api.hyperliquid.xyz/info` API.

@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-29T06:55:54.526000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/books?symbols=ACA_HOUSE_2026.NOTEXT_DEM",
+    "method": "GET"
+  },
+  "description": "Order book for ACA_HOUSE_2026.NOTEXT_DEM.",
+  "token_id": "ACA_HOUSE_2026.NOTEXT_DEM"
+}

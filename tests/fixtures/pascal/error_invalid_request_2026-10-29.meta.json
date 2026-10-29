@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T06:55:30.918000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/markets/text-search",
+    "method": "POST",
+    "body": {
+      "query": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "order_by": "volume_all_time"
+    }
+  },
+  "description": "HTTP 422 INVALID_REQUEST for a 33-character text-search query. The client rejects this locally and does not send it."
+}

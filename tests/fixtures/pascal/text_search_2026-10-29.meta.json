@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-10-29T06:59:33.822000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/markets/text-search",
+    "method": "POST",
+    "body": {
+      "query": "world series",
+      "order_by": "volume_all_time",
+      "limit": 2,
+      "status": "all"
+    }
+  },
+  "description": "Text search for 'world series', order_by volume_all_time, limit 2. Full response."
+}

@@ -2,12 +2,17 @@
 
 import importlib
 import inspect
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from prediction_markets_api.adapters.base import BaseClient
 from prediction_markets_api.venues import VENUES
+
+# Recorded files may be dated (`markets_response_2026-10-29.json`). The
+# contract suite still looks up the undated stem (`markets_response`).
+_FIXTURE_DATE = re.compile(r"_\d{4}-\d{2}-\d{2}$")
 
 
 @dataclass
@@ -98,7 +103,7 @@ def load_fixtures(adapter: AdapterConfig) -> dict[str, dict[str, Any]]:
         if fixture_file.stem.endswith(".meta"):
             continue
 
-        fixture_name = fixture_file.stem
+        fixture_name = _FIXTURE_DATE.sub("", fixture_file.stem)
         meta_file = fixture_file.with_suffix(".meta.json")
 
         # Load fixture data

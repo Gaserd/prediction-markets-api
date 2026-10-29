@@ -1,0 +1,226 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "symbol": "ACA_HOUSE_2026.NOTEXT_DEM",
+      "taker_fee_rate": "0.020000",
+      "maker_rebate_share": "0.250000",
+      "tick_size_min": "0.001000",
+      "tick_sig_figs": 3,
+      "display_attributes": {
+        "event_description": "ACA credits and 2026 House winner",
+        "expected_resolution_time_ms": "1793664000000",
+        "market_description": "Not extended, Democrats",
+        "reference": {
+          "kind": "polymarket",
+          "market_slug": "will-aca-premium-tax-credits-not-be-extended-and-will-the-democratic-party-win-the-house-in-2026",
+          "condition_id": "0xb1dd35e85b6a712dbd1049c0bd4e7637d7bfea7e1020a12d761732418a279d37",
+          "market_outcome_token_id": "86645756284795141132717911088354383841969587463930039724769631564209585656220",
+          "reverse_outcome_token_id": "100728648643824331517551299729912114537167401103552759417052764717048551539704"
+        },
+        "sort_order": "PRICE",
+        "tags": [
+          "Politics",
+          "Elections",
+          "Midterms"
+        ],
+        "topic": {
+          "id": "2026-us-midterms",
+          "description": "2026 U.S. Midterms"
+        }
+      },
+      "listing_ts_ms": "1785951998212",
+      "rules_url": "https://pascal-prod-market-metadata-355653384618.s3.ap-northeast-1.amazonaws.com/events/ACA_HOUSE_2026/ACA_HOUSE_2026.NOTEXT_DEM.md",
+      "stats": {
+        "last_24h": {
+          "mark_price_start": "0.925000",
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256840000"
+        },
+        "all_time": {
+          "taker_buy_volume": "1114",
+          "taker_sell_volume": "369",
+          "taker_buy_volume_notional": "1033.800000",
+          "taker_sell_volume_notional": "336.717000",
+          "taker_buy_trade_count": "23",
+          "taker_sell_trade_count": "22",
+          "window_end_ts_ms_exclusive": "1792426020000"
+        }
+      },
+      "mark_price": "0.925000",
+      "best_bid": "0.910000",
+      "best_ask": "0.940000",
+      "open_interest": "857",
+      "long_interest": "857",
+      "short_interest": "857"
+    },
+    {
+      "symbol": "AI_BEST_MATH_26OCT31.MICROSOFT",
+      "taker_fee_rate": "0.020000",
+      "maker_rebate_share": "0.250000",
+      "tick_size_min": "0.001000",
+      "tick_sig_figs": 3,
+      "display_attributes": {
+        "event_description": "Best math AI model end of October 2026",
+        "expected_resolution_time_ms": "1793462400000",
+        "market_description": "Microsoft",
+        "reference": {
+          "kind": "polymarket",
+          "market_slug": "will-microsoft-have-the-best-math-ai-model-at-the-end-of-october-2026-20260811194841025",
+          "condition_id": "0xf6dc7f0cbea8a4a7b2571c64788b1db0104b4f2b24186ccc7b3b56898e09e853",
+          "market_outcome_token_id": "40540124230177104452639117367186910888089901626844158289800168428552538624777",
+          "reverse_outcome_token_id": "86228320410498141804790136364852864207634931511441800842098011513534145447387"
+        },
+        "sort_order": "PRICE",
+        "tags": [
+          "AI",
+          "Tech"
+        ]
+      },
+      "listing_ts_ms": "1790783519859",
+      "rules_url": "https://pascal-prod-market-metadata-355653384618.s3.ap-northeast-1.amazonaws.com/events/AI_BEST_MATH_26OCT31/AI_BEST_MATH_26OCT31.MICROSOFT.md",
+      "stats": {
+        "last_24h": {
+          "mark_price_start": "0.068500",
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256840000"
+        },
+        "all_time": {
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256840000"
+        }
+      },
+      "mark_price": "0.052000",
+      "open_interest": "0",
+      "long_interest": "0",
+      "short_interest": "0"
+    },
+    {
+      "symbol": "BUND_2027_GLDN.DUNDAV",
+      "taker_fee_rate": "0.020000",
+      "maker_rebate_share": "0.250000",
+      "tick_size_min": "0.001000",
+      "tick_sig_figs": 3,
+      "display_attributes": {
+        "event_description": "Bundesliga 2026-27 top goalscorer",
+        "expected_resolution_time_ms": "1811807940000",
+        "market_description": "Deniz Undav",
+        "reference": {
+          "kind": "polymarket",
+          "market_slug": "will-deniz-undav-stuttgart-be-the-top-goalscorer-of-the-2026-27-bundesliga-season",
+          "condition_id": "0xcae20fa33f2b07961dca6aa5706dc34ab41c212314c4193c630bb7bfca4946da",
+          "market_outcome_token_id": "115266406032349874579588957891053665451909784858314648844393515075319037722582",
+          "reverse_outcome_token_id": "88626591698092782079909133884664471403394730449460062335630043786761101131652"
+        },
+        "sort_order": "PRICE",
+        "tags": [
+          "Sports",
+          "Soccer",
+          "Bundesliga"
+        ],
+        "topic": {
+          "id": "2026-27-bundesliga",
+          "description": "2026-27 Bundesliga"
+        }
+      },
+      "listing_ts_ms": "1789492964093",
+      "rules_url": "https://pascal-prod-market-metadata-355653384618.s3.ap-northeast-1.amazonaws.com/events/BUND_2027_GLDN/BUND_2027_GLDN.DUNDAV.md",
+      "stats": {
+        "last_24h": {
+          "mark_price_start": "0.098500",
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256840000"
+        },
+        "all_time": {
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256840000"
+        }
+      },
+      "mark_price": "0.079000",
+      "best_bid": "0.004000",
+      "open_interest": "0",
+      "long_interest": "0",
+      "short_interest": "0"
+    },
+    {
+      "symbol": "AI_BEST_CHINA_26OCT31.MEITUAN",
+      "taker_fee_rate": "0.020000",
+      "maker_rebate_share": "0.250000",
+      "tick_size_min": "0.001000",
+      "tick_sig_figs": 3,
+      "display_attributes": {
+        "event_description": "Best Chinese AI model end of October 2026",
+        "expected_resolution_time_ms": "1793462400000",
+        "market_description": "Meituan",
+        "reference": {
+          "kind": "polymarket",
+          "market_slug": "will-meituan-have-the-best-chinese-ai-model-at-the-end-of-october-2026-20260811194840888",
+          "condition_id": "0x0f970f6928c36917ea2fec39acb02574937de1c0e658e2745aa2444139bfc4da",
+          "market_outcome_token_id": "21181357260848595345228827175725779811674058515335074798579900269271154086384",
+          "reverse_outcome_token_id": "74834768879053653553332112341637418548988327511019256200676314181404180787215"
+        },
+        "sort_order": "PRICE",
+        "tags": [
+          "AI",
+          "Tech"
+        ]
+      },
+      "listing_ts_ms": "1790783514924",
+      "rules_url": "https://pascal-prod-market-metadata-355653384618.s3.ap-northeast-1.amazonaws.com/events/AI_BEST_CHINA_26OCT31/AI_BEST_CHINA_26OCT31.MEITUAN.md",
+      "stats": {
+        "last_24h": {
+          "mark_price_start": "0.007000",
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256840000"
+        },
+        "all_time": {
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256840000"
+        }
+      },
+      "mark_price": "0.007000",
+      "best_ask": "0.014000",
+      "open_interest": "0",
+      "long_interest": "0",
+      "short_interest": "0"
+    }
+  ],
+  "seq": "12282477195",
+  "state_time_ms": "1793256915520",
+  "server_time_ms": "1793256915536"
+}
