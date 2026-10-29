@@ -164,8 +164,8 @@ All venues return data through a unified model with strict guarantees:
 | | `settled` | `RESOLVED` | True | Loaded by id via `settledOutcome`. `settleFraction` `1` / `0` sets the winning side |
 | **Pascal** | `live` | `OPEN` | False | Unresolved market from `GET /api/v1/markets`. `price` is `None` unless both best bid and best ask are present |
 | | `resolved` | `RESOLVED` | True | `resolution.price` of `1` / `0` names the long / short outcome. Listed via `GET /api/v1/markets/resolved` |
-| **Predict.fun** | `REGISTERED` (trading `OPEN`) | `OPEN` | False | `GET /v1/markets?status=OPEN`. `price` is `None` unless both best bid and best ask are present |
-| | `REMOVED`, or trading `CLOSED` | `CLOSED` | False | Lifecycle `REMOVED`, or `tradingStatus=CLOSED` while the market is not `RESOLVED` |
+| **Predict.fun** | `REGISTERED`, `PRICE_PROPOSED`, `PRICE_DISPUTED` with trading `OPEN` | `OPEN` | False | `OPEN` means a new order can be placed. `price` is `None` unless both best bid and best ask are present |
+| | `REMOVED`, lifecycle `PAUSED`, or trading `CLOSED`, `PAUSED`, `CANCEL_ONLY`, `MATCHING_NOT_ENABLED` | `CLOSED` | False | Raw lifecycle `status` stays on `venue_status`. Both `status` and `tradingStatus` stay on `raw_data`. `status=OPEN` pages can include these; `list_markets(closed=False)` drops them |
 | | `RESOLVED` | `RESOLVED` | True | Winning outcome price is `1` and the others are `0`. Listed with `status=RESOLVED` |
 
 **Notes:**
@@ -412,7 +412,7 @@ Hyperliquid Outcomes limits: trades have no pagination (`recentTrades` only), th
 
 Referral links are defined in `src/prediction_markets_api/venues.py` (the same registry that generates this table), so you can see exactly what is linked and change it in a fork.
 
-Predict.fun mainnet reads are limited to 240 requests per minute per API key. The public testnet uses the same 240 per minute cap and does not require a key. `GET /v1/markets` and `GET /v1/orders/matches` page with `first` (max 100) and `after`.
+Predict.fun rate limits are per API key. `/v1/markets` and `/v1/markets/{id}` allow 240 requests per minute. `/v1/markets/{id}/orderbook`, `/quote`, and `/v1/orders/matches` share a separate bucket of 500 requests per minute. `GET /v1/markets` pages with `first` (server default 20, silently clamped to 100, no documented maximum) and `after`. `GET /v1/orders/matches` defaults `first` to 50 and clamps it to 150; this client sends 100. The public testnet does not require a key.
 
 Trading and builder-code attribution are not part of 0.9 (read-only). How builder codes will work, what they cost and how to turn them off will be documented here before 1.0.
 
@@ -502,7 +502,9 @@ Trading (`place_order` validates a dry-run and does not submit), websockets, can
 
 ## Predict.fun
 
-Predict.fun is a prediction market on **BNB Chain**. The read client talks to `https://api.predict.fun`. Docs: [dev.predict.fun](https://dev.predict.fun/). Terms: [docs.predict.fun/terms-of-service](https://docs.predict.fun/terms-of-service).
+Predict.fun is a prediction market on **BNB Chain**. The read client talks to `https://api.predict.fun`. Docs: [dev.predict.fun](https://dev.predict.fun/). Live OpenAPI: [api.predict.fun/docs](https://api.predict.fun/docs). Terms: [docs.predict.fun/terms-of-service](https://docs.predict.fun/terms-of-service).
+
+Mainnet requires an API key from https://developers.predict.fun
 
 Mainnet requires an API key in `PREDICTFUN_API_KEY`, sent as the `x-api-key` header. The key is read only from that environment variable. It is not logged, and `repr` shows `***` when it is set. A missing key raises `AuthenticationError` before the request. HTTP 401 raises the same error. The public testnet (`https://api-testnet.predict.fun`) does not require a key. Pass it as `base_url`. JWT bearer auth is only for order actions and is not used.
 
@@ -531,23 +533,27 @@ asyncio.run(main())
 
 **Supported**
 
-- `list_markets` — `GET /v1/markets`, paged with `first` and `after`. `first` is capped at 100 by the API. `closed=False` sends `status=OPEN`. `closed=True` sends `status=RESOLVED`. `closed=None` omits `status`. `limit` stops before the next page. A repeated cursor stops the iterator and logs one warning.
+- `list_markets` — `GET /v1/markets`, paged with `first` and `after`. The server default for `first` is 20. Values above 100 are silently clamped to 100, and the docs do not publish a maximum. This client sends at most 100. `closed=False` sends `status=OPEN` and then drops markets that are not tradable (`PAUSED`, `CANCEL_ONLY`, `MATCHING_NOT_ENABLED`, lifecycle `REMOVED` or `PAUSED`). `closed=True` sends `status=RESOLVED`. `closed=None` omits `status`. `limit` stops before the next page. A repeated cursor stops the iterator and logs one warning.
 - `venue_params` — `sort`, `market_variant` (`marketVariant`), and `tag_ids` (`tagIds`). Any other key raises `ValueError` before the request.
 - `get_market` — `GET /v1/markets/{id}`. HTTP 404 is `NotFoundError`.
-- `get_order_book` / `get_price` — `GET /v1/markets/{id}/orderbook`. The book is priced in outcome `indexSet` 1. `indexSet` 2 is the complement (`1 - price`, sides swapped), including when the names are not Yes and No. Outcome ids are `{market_id}:{index_set}:{on_chain_id}`. A bare market id addresses the indexSet-1 book. An empty side makes `get_price` raise `NoLiquidityError`. An unknown market is HTTP 404.
-- `get_trades` / `iter_trades` — `GET /v1/orders/matches?marketId=...`, newest first, paged with `first` and `after`. No JWT. `priceExecuted` and `amountFilled` are 18-decimal wei strings (USDT collateral); this client divides by `10**18`. Taker `quoteType` `Bid` is `BUY` and `Ask` is `SELL`. A full outcome id keeps only that outcome's prints. An empty page for an unknown market is `NotFoundError`.
+- `get_order_book` / `get_price` — `GET /v1/markets/{id}/orderbook`. The endpoint has no `indexSet` parameter. It always returns the indexSet 1 book. Outcome names are arbitrary. `indexSet` 2 is the complement (`1 - price`, sides swapped). Outcome ids are `{market_id}:{index_set}:{on_chain_id}`. A bare market id addresses the indexSet-1 book. A full id whose `onChainId` is not on the market raises `NotFoundError` before the book request. An empty side makes `get_price` raise `NoLiquidityError`. An unknown market is HTTP 404.
+- `get_trades` / `iter_trades` — `GET /v1/orders/matches?marketId=...`, newest first, paged with `first` and `after`. The server default for `first` is 50 and values above 150 are clamped to 150. This client sends 100. No JWT. `priceExecuted` and `amountFilled` are 18-decimal wei strings (USDT collateral); this client divides by `10**18`. Taker `quoteType` `Bid` is `BUY` and `Ask` is `SELL`. A full outcome id is checked with `get_market` before any match request, then prints for other outcomes are dropped on the client. An empty page for an unknown market is `NotFoundError`.
 
 **Prices and units**
 
 Outcome prices and book levels are probabilities in `[0, 1]`. `decimalPrecision` is the number of decimal places. The tick is `10 ** -decimalPrecision` (`2` → `0.01`, `3` → `0.001` on the testnet snapshot recorded 2026-10-29). The book payload does not include it, so `OrderBook.tick_size` is unset. `spreadThreshold` and `shareThreshold` are venue liquidity-program thresholds, not the tick and not `min_order_size`.
 
-`Outcome.price` is the mid when both `bestBid` and `bestAsk` exist. When only one side exists, or neither does, `price` is `None` and `raw_price` is `None`. A resolved market sets the winning outcome to `1` and the others to `0`.
+`Outcome.price` is the mid when both `bestBid` and `bestAsk` exist. Those outcome fields are deprecated by the venue. When either field is missing, `price` is `None` and `raw_price` is `None`. A resolved market sets the winning outcome to `1` and the others to `0`.
 
 Book sizes are share counts. Match amounts are wei. `stats.volumeTotalUsd` maps to `Market.volume`. `stats.totalLiquidityUsd` stays on `raw_data` only (`Market.liquidity` is `None`). Reported stats are USD notionals. The settlement token is USDT.
 
 **Rate limits**
 
-240 requests per minute. The docs state that cap for a mainnet API key. Testnet responses on 2026-10-29 sent `ratelimit-limit: 240` and `ratelimit-policy: "rpm";q=240;w=60` without a key. HTTP 429 maps to `RateLimitError`. `Retry-After` is used when present, otherwise `ratelimit-reset` (seconds).
+Per API key: 240 requests per minute for `/v1/markets` and `/v1/markets/{id}`. `/v1/markets/{id}/orderbook`, `/quote`, and `/v1/orders/matches` share a separate bucket of 500 requests per minute (testnet `ratelimit-policy` headers, observed 2026-10-29). HTTP 429 maps to `RateLimitError`. `Retry-After` is used when present, otherwise `ratelimit-reset` (seconds).
+
+**Known issues**
+
+A long testnet walk of `GET /v1/markets` can hit a venue-side HTTP 500 on a deep page (observed after the cursor for id 3882684 when `first` is 90 or more). There is no client workaround. `list_markets` raises `VenueAPIError`. The message includes the page number and the cursor of the failed request, and the listing does not finish as a successful partial result.
 
 **Not in this adapter**
 

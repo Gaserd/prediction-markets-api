@@ -14,20 +14,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is read only from that environment variable, is not logged, and is masked as
   `***` in `repr`. A missing mainnet key raises `AuthenticationError` before
   the request. HTTP 401 raises the same error. Testnet
-  `https://api-testnet.predict.fun` needs no key (`base_url`). `list_markets`
-  uses `GET /v1/markets` (`first` / `after`, API cap 100). `closed=False` sends
-  `status=OPEN`, `closed=True` sends `status=RESOLVED`, `closed=None` omits
-  `status`. `get_market` uses `GET /v1/markets/{id}`. `get_order_book` /
-  `get_price` use `GET /v1/markets/{id}/orderbook` (indexSet 1 prices;
-  indexSet 2 is the complement). `get_trades` / `iter_trades` use
-  `GET /v1/orders/matches` (no JWT). Match `priceExecuted` and `amountFilled`
+  `https://api-testnet.predict.fun` needs no key (`base_url`). Mainnet keys
+  come from https://developers.predict.fun. Docs: https://dev.predict.fun/
+  and the live OpenAPI at https://api.predict.fun/docs. `list_markets`
+  uses `GET /v1/markets` (`first` / `after`; server default 20, silently
+  clamped to 100, no documented maximum; this client sends at most 100).
+  `closed=False` sends `status=OPEN` and drops markets that are not tradable.
+  Lifecycle `PAUSED` and `REMOVED`, and `tradingStatus` `CLOSED`, `PAUSED`,
+  `CANCEL_ONLY`, and `MATCHING_NOT_ENABLED`, map to `CLOSED` (`OPEN` means a
+  new order can be placed). `PRICE_PROPOSED` and `PRICE_DISPUTED` stay `OPEN`
+  when `tradingStatus` is `OPEN`. Raw `status` stays on `venue_status`; both
+  `status` and `tradingStatus` stay on `raw_data`. `closed=True` sends
+  `status=RESOLVED`, `closed=None` omits `status`. A 5xx on a later page
+  raises `VenueAPIError` naming that page and cursor. `get_market` uses
+  `GET /v1/markets/{id}`. `get_order_book` / `get_price` use
+  `GET /v1/markets/{id}/orderbook` (always the indexSet 1 book; no indexSet
+  parameter; outcome names are arbitrary; indexSet 2 is the complement).
+  `get_trades` / `iter_trades` use `GET /v1/orders/matches` (no JWT; server
+  default `first` 50, clamped to 150; this client sends 100). A full outcome
+  id is checked with `get_market` before any match request. Match
+  `priceExecuted` and `amountFilled`
   are 18-decimal wei (USDT collateral) and are scaled by `10**-18`. `price` is
-  `None` unless both `bestBid` and `bestAsk` are present. A resolved market
+  `None` unless both deprecated `outcomes[].bestBid` and `bestAsk` are present.
+  A resolved market
   uses `1` / `0`. `decimalPrecision` is the tick (`10 ** -decimalPrecision`);
   the book payload does not include it, so `tick_size` is unset.
   `stats.totalLiquidityUsd` stays on `raw_data` (`Market.liquidity` is `None`).
-  Rate limit is 240 requests per minute (docs for a mainnet key; testnet sent
-  `ratelimit-limit: 240` on 2026-10-29). HTTP 429 maps to `RateLimitError`.
+  Rate limits per key: 240 requests per minute for `/v1/markets` and
+  `/v1/markets/{id}`; 500 requests per minute for
+  `/v1/markets/{id}/orderbook`, `/quote`, and `/v1/orders/matches` (testnet
+  `ratelimit-policy` headers, 2026-10-29). HTTP 429 maps to `RateLimitError`.
   Registry `geo_restrictions` is `Restricted by venue ToS: US, UK, France,
   Ontario, Singapore, Poland, Thailand, Australia, Belgium, Taiwan (see ToS
   for the full list)` (https://docs.predict.fun/terms-of-service). The Terms
