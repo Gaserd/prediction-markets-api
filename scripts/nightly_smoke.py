@@ -70,6 +70,8 @@ class JunitResult:
     skipped: int
     failing_tests: tuple[str, ...]
     key_skips: int
+    # Redacted assertion text for the job summary only. Never copied into the issue.
+    failure_details: tuple[str, ...] = ()
 
     @property
     def outcome(self) -> str:
@@ -97,6 +99,8 @@ class Gate:
     outcome: str
     failing_tests: tuple[str, ...] = ()
     detail: str = ""
+    # True when the workflow config itself is invalid. The job stays red.
+    config_error: bool = False
 
 
 class CollectionFailed(Exception):
@@ -198,16 +202,12 @@ def parse_venues(payload: str) -> list[Venue]:
         demo_only = item.get("demo_only", False)
         if not isinstance(demo_only, bool):
             raise SmokeConfigError(f"{venue}: demo_only must be a boolean")
-        if api_base.strip():
-            # Validate now so a bad host never reaches pytest.
-            kalshi_smoke_api_base({"KALSHI_API_BASE": api_base})
-        elif demo_only:
-            raise SmokeConfigError(f"{venue}: demo_only venues need an api_base")
+        validated_base = _enforce_venue_api(venue, demo_only, api_base)
         venues.append(
             Venue(
                 venue=venue,
                 required_secrets=required,
-                api_base=kalshi_smoke_api_base({"KALSHI_API_BASE": api_base}) or "",
+                api_base=validated_base,
                 demo_only=demo_only,
             )
         )
@@ -228,9 +228,52 @@ def filter_venues(venues: Sequence[Venue], selected: str) -> list[Venue]:
     return [venue for venue in venues if venue.venue in wanted]
 
 
+def _enforce_venue_api(venue: str, demo_only: bool, api_base: str) -> str:
+    """Return the API root to export, or '' when the venue keeps its adapter default.
+
+    Kalshi is demo-only even if the workflow list says otherwise. A production
+    host, a missing base, or ``demo_only: false`` is rejected here.
+    """
+    if venue == "kalshi":
+        if not demo_only:
+            raise SmokeConfigError("kalshi must set demo_only true and a demo api_base")
+        validated = kalshi_smoke_api_base({"KALSHI_API_BASE": api_base})
+        if not validated:
+            raise SmokeConfigError("kalshi requires a demo api_base")
+        return validated
+    if api_base.strip():
+        validated = kalshi_smoke_api_base({"KALSHI_API_BASE": api_base})
+        if not validated:
+            raise SmokeConfigError(f"{venue}: api_base is empty")
+        return validated
+    if demo_only:
+        raise SmokeConfigError(f"{venue}: demo_only venues need an api_base")
+    return ""
+
+
+# Predict.fun mainnet reads need this key. Testnet live tests do not, and the
+# mainnet tests skip themselves. A missing key must not skip the whole job.
+_OPTIONAL_MAINNET_SECRETS: dict[str, frozenset[str]] = {
+    "predict_fun": frozenset({"PREDICTFUN_API_KEY"}),
+}
+
+
 def missing_secret_names(required: Sequence[str], environ: Mapping[str, str]) -> list[str]:
     """Secret names that are unset or whitespace. Values are not returned."""
     return [name for name in required if not environ.get(name, "").strip()]
+
+
+def blocking_secret_names(
+    venue: str, required: Sequence[str], environ: Mapping[str, str]
+) -> list[str]:
+    """Secrets that skip the job. Predict.fun's mainnet key does not."""
+    optional = _OPTIONAL_MAINNET_SECRETS.get(venue, frozenset())
+    return [name for name in missing_secret_names(required, environ) if name not in optional]
+
+
+def predict_fun_mainnet_key_skipped(venue: str, result: JunitResult) -> bool:
+    """Predict.fun ran, nothing failed, and mainnet cases skipped for the key."""
+    return venue == "predict_fun" and result.failed == 0 and result.key_skips > 0
 
 
 def test_file_for(venue: str) -> Path:
@@ -291,12 +334,7 @@ def decide_gate(
     if not _VENUE_NAME.fullmatch(venue):
         raise SmokeConfigError(f"Invalid venue name: {venue!r}")
     try:
-        if demo_only:
-            validated = kalshi_smoke_api_base({"KALSHI_API_BASE": api_base})
-            if not validated:
-                raise SmokeConfigError(f"{venue} is demo-only and api_base is empty")
-        elif api_base.strip():
-            kalshi_smoke_api_base({"KALSHI_API_BASE": api_base})
+        _enforce_venue_api(venue, demo_only, api_base)
     except SmokeConfigError as exc:
         summary = _summary(venue, "failed: smoke configuration", [str(exc)])
         return Gate(
@@ -306,6 +344,7 @@ def decide_gate(
             outcome="failed",
             failing_tests=(f"configuration: {venue}",),
             detail=str(exc),
+            config_error=True,
         )
 
     if not file_exists:
@@ -339,7 +378,7 @@ def decide_gate(
         )
         return Gate(False, 0, summary, "no_tests")
 
-    missing = missing_secret_names(required_secrets, environ)
+    missing = blocking_secret_names(venue, required_secrets, environ)
     if missing:
         names = ", ".join(f"`{name}`" for name in missing)
         summary = _summary(
@@ -363,11 +402,13 @@ def parse_junit(path: Path) -> JunitResult:
         raise CollectionFailed(f"Could not read junit xml: {exc}") from exc
     passed = failed = skipped = key_skips = 0
     failing: list[str] = []
+    details: list[str] = []
     for case in root.iter("testcase"):
         name = _node_id(case)
         if case.find("failure") is not None or case.find("error") is not None:
             failed += 1
             failing.append(name)
+            details.append(_clip_failure_message(case))
             continue
         skip = case.find("skipped")
         if skip is not None:
@@ -377,25 +418,43 @@ def parse_junit(path: Path) -> JunitResult:
                 key_skips += 1
             continue
         passed += 1
-    return JunitResult(passed, failed, skipped, tuple(failing), key_skips)
+    return JunitResult(passed, failed, skipped, tuple(failing), key_skips, tuple(details))
 
 
-def result_from_pytest(junit: Path | None, pytest_exit: int) -> JunitResult:
+def result_from_pytest(
+    junit: Path | None,
+    pytest_exit: int,
+    *,
+    exit_known: bool = True,
+) -> JunitResult:
     """Prefer the JUnit file. A missing file is a failure, not a pass."""
     if junit is not None and junit.is_file():
         parsed = parse_junit(junit)
-        if pytest_exit not in (0, 1, 5) and parsed.outcome != "failed":
+        unexpected = (not exit_known) or pytest_exit not in (0, 1, 5)
+        if unexpected and parsed.outcome != "failed":
+            note = (
+                "pytest did not finish (no exit code)"
+                if not exit_known
+                else f"pytest exited {pytest_exit}"
+            )
             return JunitResult(
                 parsed.passed,
                 parsed.failed + 1,
                 parsed.skipped,
-                parsed.failing_tests + (f"pytest exited {pytest_exit}",),
+                parsed.failing_tests + (note,),
                 parsed.key_skips,
+                parsed.failure_details + ("",),
             )
         return parsed
-    if pytest_exit == 5:
+    if pytest_exit == 5 and exit_known:
         return JunitResult(0, 0, 0, (), 0)
-    return JunitResult(0, 1, 0, (f"pytest exited {pytest_exit} before writing results",), 0)
+    if not exit_known:
+        reason = (
+            "pytest did not finish and smoke-junit.xml is missing (step timeout or cancellation)"
+        )
+    else:
+        reason = f"smoke-junit.xml is missing after pytest exited {pytest_exit}"
+    return JunitResult(0, 1, 0, (reason,), 0)
 
 
 def status_line(result: JunitResult) -> str:
@@ -411,12 +470,19 @@ def status_line(result: JunitResult) -> str:
 
 
 def summary_for_result(venue: str, result: JunitResult) -> str:
+    if predict_fun_mainnet_key_skipped(venue, result):
+        mainnet_lines = ["Mainnet tests skipped because `PREDICTFUN_API_KEY` is unset."]
+        if result.passed:
+            mainnet_lines.insert(0, f"{result.passed} test(s) that do not need a key passed.")
+        return _summary(venue, "mainnet skipped: no key", mainnet_lines)
     lines: list[str] = []
     if result.outcome == "no_key":
         lines.append("This venue was not tested. Collected tests skipped because a key is unset.")
     elif result.failing_tests:
         lines.append("Failing tests:")
-        lines.extend(f"- `{name}`" for name in result.failing_tests)
+        lines.extend(_summary_failure_lines(result))
+        if venue == "predict_fun" and result.key_skips:
+            lines.append("Mainnet tests skipped because `PREDICTFUN_API_KEY` is unset.")
     if result.outcome == "passed" and result.skipped:
         lines.append(f"{result.skipped} test(s) skipped for a reason other than a missing key.")
     return _summary(venue, status_line(result), lines)
@@ -488,6 +554,38 @@ def _summary(venue: str, status: str, details: Sequence[str]) -> str:
     lines = [f"### {venue}", "", status, ""]
     lines.extend(detail for detail in details if detail)
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _summary_failure_lines(result: JunitResult) -> list[str]:
+    """One summary bullet per failure. The short message stays out of the issue."""
+    lines: list[str] = []
+    details = result.failure_details
+    for index, name in enumerate(result.failing_tests):
+        message = details[index] if index < len(details) else ""
+        if message and message != name:
+            lines.append(f"- `{name}`: {message}")
+        else:
+            lines.append(f"- `{name}`")
+    return lines
+
+
+def _clip_failure_message(case: ET.Element) -> str:
+    child = case.find("failure")
+    if child is None:
+        child = case.find("error")
+    if child is None:
+        return ""
+    raw = child.get("message") or child.text or ""
+    return _clip_text(redact(raw))
+
+
+def _clip_text(text: str, limit: int = 200) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    if limit <= 3:
+        return collapsed[:limit]
+    return collapsed[: limit - 3] + "..."
 
 
 def _node_id(case: ET.Element) -> str:
@@ -727,15 +825,16 @@ def cmd_gate(summary_path: str, github_output: str, update_issues: bool) -> int:
     file_exists = test_file.is_file()
     collected: int | None = None
     collection_error: str | None = None
-    # Collect only after the file is known to exist, and only if the demo host
-    # (when required) is already valid. decide_gate repeats that check.
-    if file_exists and (not demo_only or api_base.strip()):
+    # Collect only after the demo host (required for Kalshi) is valid.
+    # decide_gate repeats that check and is what records a config failure.
+    config_ok = True
+    try:
+        _enforce_venue_api(venue, demo_only, api_base)
+    except SmokeConfigError:
+        config_ok = False
+    if file_exists and config_ok:
         try:
-            if demo_only:
-                kalshi_smoke_api_base({"KALSHI_API_BASE": api_base})
             collected = live_test_count(test_file)
-        except SmokeConfigError:
-            collected = None
         except CollectionFailed as exc:
             collection_error = exc.detail
 
@@ -760,19 +859,57 @@ def cmd_gate(summary_path: str, github_output: str, update_issues: bool) -> int:
     _write(github_output, f"run={'true' if gate.run else 'false'}\n")
     if gate.outcome == "no_key":
         print("::warning title=nightly-smoke::skipped: no key")
-    if gate.outcome == "failed":
+    if gate.outcome != "failed":
+        return gate.exit_code
+    status = gate.summary.splitlines()[2] if gate.summary else "failed"
+    # A broken gate stays red even after the issue is filed. A venue failure
+    # (for example collection) is green once the issue or comment exists.
+    if gate.config_error:
         try:
             _apply_failure_or_pass(
                 venue=venue,
                 outcome="failed",
-                status=gate.summary.splitlines()[2] if gate.summary else "failed",
+                status=status,
                 failing_tests=gate.failing_tests,
                 update_issues=update_issues,
             )
         except SmokeConfigError as exc:
             print(redact(str(exc)), file=sys.stderr)
-            return 1
-    return gate.exit_code
+        return 1
+    return _record_venue_failure(
+        venue=venue,
+        status=status,
+        failing_tests=gate.failing_tests,
+        update_issues=update_issues,
+    )
+
+
+def _record_venue_failure(
+    *,
+    venue: str,
+    status: str,
+    failing_tests: Sequence[str],
+    update_issues: bool,
+) -> int:
+    """Exit 0 after the venue issue is opened or commented. Exit 1 otherwise."""
+    if not update_issues:
+        print(
+            f"{venue}: live smoke failed and the venue issue was not updated",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        _apply_failure_or_pass(
+            venue=venue,
+            outcome="failed",
+            status=status,
+            failing_tests=failing_tests,
+            update_issues=True,
+        )
+    except SmokeConfigError as exc:
+        print(redact(str(exc)), file=sys.stderr)
+        return 1
+    return 0
 
 
 def cmd_report(summary_path: str, junit_path: str, update_issues: bool) -> int:
@@ -780,32 +917,53 @@ def cmd_report(summary_path: str, junit_path: str, update_issues: bool) -> int:
     if not _VENUE_NAME.fullmatch(venue):
         print("VENUE is not set to a venue name", file=sys.stderr)
         return 1
-    try:
-        pytest_exit = int(os.environ.get("PYTEST_EXIT", "1"))
-    except ValueError:
-        print("PYTEST_EXIT is not an integer", file=sys.stderr)
-        return 1
+    raw_exit = os.environ.get("PYTEST_EXIT", "").strip()
+    exit_known = False
+    pytest_exit = 1
+    if raw_exit:
+        try:
+            pytest_exit = int(raw_exit)
+            exit_known = True
+        except ValueError:
+            exit_known = False
     junit = Path(junit_path) if junit_path else None
     try:
-        result = result_from_pytest(junit, pytest_exit)
+        result = result_from_pytest(junit, pytest_exit, exit_known=exit_known)
     except CollectionFailed as exc:
-        result = JunitResult(0, 1, 0, (redact(str(exc))[:300],), 0)
+        message = _clip_text(redact(str(exc)))
+        result = JunitResult(0, 1, 0, (message,), 0, (message,))
     summary = summary_for_result(venue, result)
     _write(summary_path, summary)
-    if result.outcome == "no_key":
-        print("::warning title=nightly-smoke::skipped: no key")
-    try:
-        _apply_failure_or_pass(
-            venue=venue,
-            outcome=result.outcome,
-            status=status_line(result),
-            failing_tests=result.failing_tests,
-            update_issues=update_issues,
-        )
-    except SmokeConfigError as exc:
-        print(redact(str(exc)), file=sys.stderr)
-        return 1
-    return 1 if result.outcome == "failed" else 0
+    # A Predict.fun run with mainnet key-skips is not a pass and not a failure.
+    # Leave any open issue as-is: testnet did not prove mainnet.
+    if predict_fun_mainnet_key_skipped(venue, result):
+        print("::warning title=nightly-smoke::mainnet skipped: no key")
+        outcome = "mainnet_no_key"
+        status = "mainnet skipped: no key"
+    else:
+        if result.outcome == "no_key":
+            print("::warning title=nightly-smoke::skipped: no key")
+        outcome = result.outcome
+        status = status_line(result)
+    if outcome != "failed":
+        try:
+            _apply_failure_or_pass(
+                venue=venue,
+                outcome=outcome,
+                status=status,
+                failing_tests=result.failing_tests,
+                update_issues=update_issues,
+            )
+        except SmokeConfigError as exc:
+            print(redact(str(exc)), file=sys.stderr)
+            return 1
+        return 0
+    return _record_venue_failure(
+        venue=venue,
+        status=status_line(result),
+        failing_tests=result.failing_tests,
+        update_issues=update_issues,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
