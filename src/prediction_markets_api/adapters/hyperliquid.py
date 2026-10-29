@@ -6,8 +6,15 @@ Endpoints used:
 
 - ``outcomeMeta`` — live outcomes and questions (one payload, no cursor)
 - ``outcomeTemplates`` — display-name patterns for template markets
-- ``allMids`` — mid prices for outcome coins (``#<10 * outcome + side>``)
-- ``l2Book`` — order book for one outcome coin (at most 20 levels per side)
+- ``allMids`` — mid prices for outcome coins (``#<10 * outcome + side>``).
+  An empty book still has a mid (often ``0.5``); that mid is not used as the
+  outcome price. See ``l2Book`` below.
+- ``l2Book`` — order book for one outcome coin (at most 20 levels per side).
+  ``list_markets`` and ``get_market`` call this once per priced question
+  fallback (side 0 only; Yes and No share one book), up to 8 calls in flight.
+  Each call has info weight 2. The result is not cached on the client. No
+  levels means ``price`` is ``None``. A failed check (404, 429, 5xx, timeout)
+  also sets that leg's price to ``None`` and does not abort the call.
 - ``recentTrades`` — latest trades for one coin (no cursor; a short window)
 - ``settledOutcome`` — one settled outcome by id
 
@@ -24,10 +31,12 @@ Gaps (see the changelog and the client docstrings):
   liquidity figure. ``created_at`` is the time the record was parsed.
 """
 
+import asyncio
 import logging
 import os
 import re
-from collections.abc import AsyncIterator, Iterator
+import warnings
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -56,6 +65,9 @@ from prediction_markets_api.utils import parse_timestamp
 
 logger = logging.getLogger(__name__)
 
+# Info API: l2Book weight is 2. Cap in-flight checks so a full listing stays
+# near a handful of round trips instead of one request per fallback.
+_L2_IN_FLIGHT = 8
 _HL_TIME = re.compile(r"^\d{8}-\d{4}$")
 _TEMPLATE_PREFIX = "template:"
 # outcomeMeta / l2Book docs: books return at most 20 levels per side.
@@ -327,7 +339,20 @@ class HyperliquidClient(BaseClient):
 
         ``outcomeMeta`` returns every live outcome and question in one response,
         so ``page_size`` is accepted for signature compatibility and ignored.
-        Results are sliced to ``limit`` after that single listing is parsed.
+        ``limit`` stops the iterator, including further fallback book lookups.
+
+        Question fallbacks are priced from ``allMids`` only when ``l2Book`` has
+        at least one level. An empty book sets that leg's price to ``None``
+        (``allMids`` often reports ``0.5`` with no orders). One side-0
+        ``l2Book`` is issued per priced fallback this call yields, at most 8
+        in flight. The check belongs to this call only and is not stored on
+        the client. The duplicate-Other fallback that is left out of a question
+        is not requested. Standalone outcomes are not checked here.
+
+        If a book cannot be checked (HTTP 404, 429, 5xx, or a timeout), that
+        leg's price is ``None``. One warning summarises how many legs failed,
+        and the rest of the listing is still returned. A question that cannot
+        be parsed does not use up a ``limit`` slot.
 
         Args:
             closed: ``False`` keeps markets that are still open. ``None`` returns
@@ -343,7 +368,8 @@ class HyperliquidClient(BaseClient):
         Raises:
             ValueError: If ``limit`` is not positive.
             NotImplementedError: If ``closed`` is ``True``.
-            VenueAPIError: If the info API request fails.
+            VenueAPIError: If ``outcomeMeta``, ``outcomeTemplates``, or
+                ``allMids`` fails. A failed fallback ``l2Book`` does not raise.
         """
         validate_limit(limit)
         # page_size is part of the shared signature. outcomeMeta is one snapshot.
@@ -364,12 +390,58 @@ class HyperliquidClient(BaseClient):
 
         templates = await self._load_templates()
         mids = await self._load_mids()
+        by_id = _outcomes_by_id(outcomes)
+        selected, grouped, fallback_ids, scan_standalones = _plan_listing(
+            questions,
+            by_id,
+            templates,
+            mids,
+            venue_filter,
+            closed=closed,
+            limit=limit,
+        )
+        states = await self._classify_books(fallback_ids)
+        _warn_unverified_books(_unverified_count(states), stacklevel=3)
+        bookless = _bookless_coins(states)
         yielded = 0
-        for market in _iter_listing(outcomes, questions, templates, mids, venue_filter):
-            if closed is False and market.status != MarketStatus.OPEN:
-                continue
+        for question in selected:
             if limit is not None and yielded >= limit:
                 return
+            try:
+                market = _question_market(question, by_id, templates, mids, bookless=bookless)
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.warning(
+                    "Skipping Hyperliquid question %s due to parse error: %s",
+                    question.get("question"),
+                    exc,
+                )
+                continue
+            if closed is False and market.status != MarketStatus.OPEN:
+                continue
+            yield market
+            yielded += 1
+
+        if not scan_standalones:
+            return
+        for outcome in outcomes:
+            if limit is not None and yielded >= limit:
+                return
+            outcome_id = outcome.get("outcome")
+            if not isinstance(outcome_id, int) or outcome_id in grouped:
+                continue
+            if not _outcome_matches_venue(outcome, venue_filter):
+                continue
+            try:
+                market = _binary_market(outcome, templates, mids)
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.warning(
+                    "Skipping Hyperliquid outcome %s due to parse error: %s",
+                    outcome_id,
+                    exc,
+                )
+                continue
+            if closed is False and market.status != MarketStatus.OPEN:
+                continue
             yield market
             yielded += 1
 
@@ -386,9 +458,16 @@ class HyperliquidClient(BaseClient):
         is missing there is loaded from ``settledOutcome``. A null body means
         the id does not exist.
 
+        A question fallback, or a fallback fetched by its own outcome id, has
+        ``price=None`` when its side-0 book has no levels or that check fails.
+        The check is one ``l2Book`` for this call and is not cached. A failed
+        check warns once and does not raise.
+
         Raises:
             NotFoundError: If the id is unknown.
-            VenueAPIError: If the info API request fails.
+            VenueAPIError: If ``outcomeMeta``, ``outcomeTemplates``, ``allMids``,
+                or ``settledOutcome`` fails. A failed fallback ``l2Book`` does
+                not raise.
         """
         meta = await self._outcome_meta()
         templates = await self._load_templates()
@@ -408,7 +487,17 @@ class HyperliquidClient(BaseClient):
                     resource_id=market_id,
                 )
             mids = await self._load_mids()
-            return _question_market(question, by_id, templates, mids)
+            fallback_id = _priced_fallback_id(question, by_id, templates)
+            question_ids = [fallback_id] if fallback_id is not None else []
+            question_states = await self._classify_books(question_ids)
+            _warn_unverified_books(_unverified_count(question_states), stacklevel=3)
+            return _question_market(
+                question,
+                by_id,
+                templates,
+                mids,
+                bookless=_bookless_coins(question_states),
+            )
 
         outcome_id = _outcome_number(market_id)
         if outcome_id is None:
@@ -420,7 +509,12 @@ class HyperliquidClient(BaseClient):
         raw = by_id.get(outcome_id)
         if raw is not None:
             mids = await self._load_mids()
-            return _binary_market(raw, templates, mids)
+            side_bookless: set[str] = set()
+            if outcome_id in _fallback_ids(questions):
+                side_states = await self._classify_books([outcome_id])
+                _warn_unverified_books(_unverified_count(side_states), stacklevel=3)
+                side_bookless = _bookless_coins(side_states)
+            return _binary_market(raw, templates, mids, bookless=side_bookless)
         settled = await self._info({"type": "settledOutcome", "outcome": outcome_id})
         if isinstance(settled, dict) and isinstance(settled.get("spec"), dict):
             return _settled_market(settled, templates)
@@ -665,6 +759,75 @@ class HyperliquidClient(BaseClient):
         data = await self._info({"type": "allMids"})
         return _mids_map(data)
 
+    async def _classify_books(self, outcome_ids: list[int]) -> dict[int, str]:
+        """Classify side-0 books for this call only.
+
+        Values are ``empty``, ``live``, ``unknown``, or ``unverified``. At most
+        ``_L2_IN_FLIGHT`` requests run at once. Ids are deduplicated and the
+        result keeps the first-seen order. Nothing is stored on the client.
+        ``VenueAPIError`` (429, 5xx, timeout) and ``NotFoundError`` (404) become
+        ``unverified``. Other books in the same call still run. A body that is
+        not an order book is ``unknown`` and does not clear the mid.
+        """
+        ordered: list[int] = []
+        seen: set[int] = set()
+        for outcome_id in outcome_ids:
+            if outcome_id in seen:
+                continue
+            seen.add(outcome_id)
+            ordered.append(outcome_id)
+        if not ordered:
+            return {}
+        semaphore = asyncio.Semaphore(_L2_IN_FLIGHT)
+
+        async def one(outcome_id: int) -> tuple[int, str]:
+            async with semaphore:
+                try:
+                    payload = await self._info({"type": "l2Book", "coin": _coin(outcome_id, 0)})
+                except (VenueAPIError, NotFoundError):
+                    return outcome_id, "unverified"
+                return outcome_id, _l2_book_state(payload)
+
+        pairs = await asyncio.gather(*(one(outcome_id) for outcome_id in ordered))
+        return dict(pairs)
+
+
+def _bookless_coins(states: dict[int, str]) -> set[str]:
+    """Side-0 coins whose book is empty or could not be checked."""
+    coins: set[str] = set()
+    for outcome_id, state in states.items():
+        if state in {"empty", "unverified"}:
+            coins.add(_coin(outcome_id, 0))
+    return coins
+
+
+def _unverified_count(states: dict[int, str]) -> int:
+    """How many books this call failed to check."""
+    return sum(1 for state in states.values() if state == "unverified")
+
+
+def _warn_unverified_books(count: int, *, stacklevel: int) -> None:
+    """One warning per call when some fallback books could not be checked.
+
+    ``stacklevel`` is forwarded to ``warnings.warn``. Callers pass 3 so the
+    warning points at the user of ``list_markets`` / ``get_market``.
+    """
+    if count <= 0:
+        return
+    noun = "leg" if count == 1 else "legs"
+    message = f"Hyperliquid l2Book check failed for {count} fallback {noun}; those prices are None"
+    logger.warning(message)
+    warnings.warn(message, UserWarning, stacklevel=stacklevel)
+
+
+def _outcomes_by_id(outcomes: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    by_id: dict[int, dict[str, Any]] = {}
+    for outcome in outcomes:
+        outcome_id = outcome.get("outcome")
+        if isinstance(outcome_id, int):
+            by_id[outcome_id] = outcome
+    return by_id
+
 
 def _venue_filter(venue_params: dict[str, Any] | None) -> str | None:
     if not venue_params:
@@ -683,55 +846,6 @@ def _outcome_matches_venue(outcome: dict[str, Any], venue_filter: str | None) ->
     return outcome.get("venue") == venue_filter
 
 
-def _iter_listing(
-    outcomes: list[dict[str, Any]],
-    questions: list[dict[str, Any]],
-    templates: dict[str, dict[str, Any]],
-    mids: dict[str, str],
-    venue_filter: str | None,
-) -> Iterator[Market]:
-    """Yield question markets, then standalone outcomes not owned by a question."""
-    by_id: dict[int, dict[str, Any]] = {}
-    for outcome in outcomes:
-        outcome_id = outcome.get("outcome")
-        if isinstance(outcome_id, int):
-            by_id[outcome_id] = outcome
-
-    grouped: set[int] = set()
-    for question in questions:
-        leg_ids = _question_leg_ids(question)
-        legs = [by_id[leg_id] for leg_id in leg_ids if leg_id in by_id]
-        if venue_filter is not None and not any(
-            _outcome_matches_venue(leg, venue_filter) for leg in legs
-        ):
-            grouped.update(leg_ids)
-            continue
-        grouped.update(leg_ids)
-        try:
-            yield _question_market(question, by_id, templates, mids)
-        except (KeyError, ValueError, TypeError) as exc:
-            logger.warning(
-                "Skipping Hyperliquid question %s due to parse error: %s",
-                question.get("question"),
-                exc,
-            )
-
-    for outcome in outcomes:
-        outcome_id = outcome.get("outcome")
-        if not isinstance(outcome_id, int) or outcome_id in grouped:
-            continue
-        if not _outcome_matches_venue(outcome, venue_filter):
-            continue
-        try:
-            yield _binary_market(outcome, templates, mids)
-        except (KeyError, ValueError, TypeError) as exc:
-            logger.warning(
-                "Skipping Hyperliquid outcome %s due to parse error: %s",
-                outcome_id,
-                exc,
-            )
-
-
 def _question_leg_ids(question: dict[str, Any]) -> list[int]:
     legs: list[int] = []
     named = question.get("namedOutcomes")
@@ -741,6 +855,82 @@ def _question_leg_ids(question: dict[str, Any]) -> list[int]:
     if isinstance(fallback, int):
         legs.append(fallback)
     return legs
+
+
+def _priced_fallback_id(
+    question: dict[str, Any],
+    by_id: dict[int, dict[str, Any]],
+    templates: dict[str, dict[str, Any]],
+) -> int | None:
+    """Fallback this question prices, or None when that leg is omitted.
+
+    The duplicate-Other fallback is left out of the question, so its book is
+    not requested from a question listing or ``get_market`` of the question.
+    """
+    description = question.get("description")
+    description_text = description if isinstance(description, str) else None
+    fields = _parse_kv(description_text)
+    fallback_id = question.get("fallbackOutcome")
+    if not isinstance(fallback_id, int) or fallback_id not in by_id:
+        return None
+    if _duplicate_other_fallback(question, by_id, fields, templates) == fallback_id:
+        return None
+    return fallback_id
+
+
+def _plan_listing(
+    questions: list[dict[str, Any]],
+    by_id: dict[int, dict[str, Any]],
+    templates: dict[str, dict[str, Any]],
+    mids: dict[str, str],
+    venue_filter: str | None,
+    *,
+    closed: bool | None,
+    limit: int | None,
+) -> tuple[list[dict[str, Any]], set[int], list[int], bool]:
+    """Questions this call will try to yield, plus whether to scan standalones.
+
+    Hitting ``limit`` stops the question loop. Only a question that parses
+    counts toward that limit, so a broken question does not shrink the page.
+    Legs of questions that were not visited must not come back as binaries,
+    so the standalone scan is skipped in that case. Venue-filtered and
+    already-expired questions are grouped and do not spend an ``l2Book`` call.
+    """
+    grouped: set[int] = set()
+    selected: list[dict[str, Any]] = []
+    fallback_ids: list[int] = []
+    stopped_early = False
+    for question in questions:
+        if limit is not None and len(selected) >= limit:
+            stopped_early = True
+            break
+        leg_ids = _question_leg_ids(question)
+        legs = [by_id[leg_id] for leg_id in leg_ids if leg_id in by_id]
+        if venue_filter is not None and not any(
+            _outcome_matches_venue(leg, venue_filter) for leg in legs
+        ):
+            grouped.update(leg_ids)
+            continue
+        grouped.update(leg_ids)
+        if closed is False:
+            description = question.get("description")
+            description_text = description if isinstance(description, str) else None
+            if _status_for_end(_end_date(_parse_kv(description_text))) != MarketStatus.OPEN:
+                continue
+        try:
+            _question_market(question, by_id, templates, mids)
+        except (KeyError, ValueError, TypeError) as exc:
+            logger.warning(
+                "Skipping Hyperliquid question %s due to parse error: %s",
+                question.get("question"),
+                exc,
+            )
+            continue
+        selected.append(question)
+        fallback_id = _priced_fallback_id(question, by_id, templates)
+        if fallback_id is not None:
+            fallback_ids.append(fallback_id)
+    return selected, grouped, fallback_ids, not stopped_early
 
 
 def _status_for_end(end_date: datetime | None, *, now: datetime | None = None) -> MarketStatus:
@@ -756,6 +946,7 @@ def _binary_market(
     mids: dict[str, str],
     *,
     now: datetime | None = None,
+    bookless: set[str] | None = None,
 ) -> Market:
     outcome_id = outcome.get("outcome")
     if not isinstance(outcome_id, int):
@@ -768,7 +959,7 @@ def _binary_market(
     end = _end_date(fields)
     status = _status_for_end(end, now=now)
     sides = _dict_list(outcome.get("sideSpecs"))
-    outcomes = _side_outcomes(str(outcome_id), outcome_id, sides, fields, mids)
+    outcomes = _side_outcomes(str(outcome_id), outcome_id, sides, fields, mids, bookless=bookless)
     return Market(
         id=str(outcome_id),
         venue="hyperliquid",
@@ -799,6 +990,7 @@ def _question_market(
     mids: dict[str, str],
     *,
     now: datetime | None = None,
+    bookless: set[str] | None = None,
 ) -> Market:
     question_id = question.get("question")
     if not isinstance(question_id, int):
@@ -813,7 +1005,7 @@ def _question_market(
     quote: Any = None
     legs: list[Outcome] = []
     # A named "Other" (awardOther) plus the protocol fallback (also labeled
-    # Other, mid 0.5, no book) would count the same leg twice. Drop the fallback.
+    # Other, and usually no book) would count the same leg twice. Drop the fallback.
     omit_fallback = _duplicate_other_fallback(question, by_id, fields, templates)
     for leg_id in _question_leg_ids(question):
         if leg_id == omit_fallback:
@@ -823,7 +1015,7 @@ def _question_market(
             continue
         if quote is None:
             quote = raw.get("quoteToken")
-        legs.append(_leg_outcome(str(question_id), raw, fields, templates, mids))
+        legs.append(_leg_outcome(str(question_id), raw, fields, templates, mids, bookless=bookless))
     return Market(
         id=f"q{question_id}",
         venue="hyperliquid",
@@ -905,24 +1097,22 @@ def _side_outcomes(
     sides: list[dict[str, Any]],
     fields: dict[str, str],
     mids: dict[str, str],
+    *,
+    bookless: set[str] | None = None,
 ) -> list[Outcome]:
     parsed: list[Outcome] = []
     for index, side in enumerate(sides[:2]):
         spec_name = side.get("name")
         label = _side_label(spec_name if isinstance(spec_name, str) else f"Side {index}", fields)
         coin = _coin(outcome_id, index)
-        mid = mids.get(coin)
-        price = _decimal(mid)
-        if price is not None and (price < Decimal("0") or price > Decimal("1")):
-            price = None
-            mid = None
+        price, raw_price = _mid_for_coin(coin, mids, bookless)
         parsed.append(
             Outcome(
                 id=coin,
                 market_id=market_id,
                 name=label,
                 price=price,
-                raw_price=mid if price is not None else None,
+                raw_price=raw_price,
             )
         )
     return parsed
@@ -938,9 +1128,10 @@ def _duplicate_other_fallback(
 
     Award markets (Ballon d'Or) register a tradable ``awardOther`` and a
     protocol fallback (``template fallback``, description ``other``). Both
-    render as Other. The fallback has no book; ``allMids`` prices it at 0.5,
-    which pushes the outcome probability sum to about 1.5. Contest and
-    price-bucket fallbacks are the only Other leg, so they stay.
+    render as Other. Listing both would count the same leg twice. Contest and
+    price-bucket fallbacks are the only Other leg, so they stay. An empty
+    book on a leg that stays is priced as ``None`` by the caller, not as the
+    ``allMids`` value.
     """
     fallback_id = question.get("fallbackOutcome")
     if not isinstance(fallback_id, int):
@@ -986,24 +1177,90 @@ def _leg_outcome(
     parent_fields: dict[str, str],
     templates: dict[str, dict[str, Any]],
     mids: dict[str, str],
+    *,
+    bookless: set[str] | None = None,
 ) -> Outcome:
     outcome_id = outcome.get("outcome")
     if not isinstance(outcome_id, int):
         raise ValueError("leg outcome id missing")
     label = _leg_label(outcome, parent_fields, templates)
     coin = _coin(outcome_id, 0)
-    mid = mids.get(coin)
-    price = _decimal(mid)
-    if price is not None and (price < Decimal("0") or price > Decimal("1")):
-        price = None
-        mid = None
+    price, raw_price = _mid_for_coin(coin, mids, bookless)
     return Outcome(
         id=coin,
         market_id=market_id,
         name=label,
         price=price,
-        raw_price=mid if price is not None else None,
+        raw_price=raw_price,
     )
+
+
+def _fallback_ids(questions: list[dict[str, Any]]) -> set[int]:
+    """Outcome ids registered as a question's ``fallbackOutcome``."""
+    ids: set[int] = set()
+    for question in questions:
+        fallback_id = question.get("fallbackOutcome")
+        if isinstance(fallback_id, int):
+            ids.add(fallback_id)
+    return ids
+
+
+def _l2_book_state(payload: object) -> str:
+    """Classify an ``l2Book`` body as ``empty``, ``live``, or ``unknown``.
+
+    ``empty`` is a null body or a book whose bid and ask lists are both empty.
+    ``live`` has at least one level. ``unknown`` is some other info payload
+    (for example ``outcomeMeta``); callers keep the ``allMids`` price then.
+    """
+    if payload is None:
+        return "empty"
+    if not isinstance(payload, dict):
+        return "unknown"
+    levels = payload.get("levels")
+    if not isinstance(levels, list) or len(levels) < 2:
+        return "unknown"
+    bids = levels[0]
+    asks = levels[1]
+    if not isinstance(bids, list) or not isinstance(asks, list):
+        return "unknown"
+    if not bids and not asks:
+        return "empty"
+    return "live"
+
+
+def _coin_lacks_book(coin: str, bookless: set[str]) -> bool:
+    """True when ``coin`` or its side-0 pair is in ``bookless``.
+
+    Yes and No share one merged book, so an empty side-0 book clears both sides.
+    """
+    if coin in bookless:
+        return True
+    if not coin.startswith("#") or not coin[1:].isdigit():
+        return False
+    encoding = int(coin[1:])
+    side = encoding % 10
+    if side not in (0, 1):
+        return False
+    return f"#{encoding - side}" in bookless
+
+
+def _mid_for_coin(
+    coin: str,
+    mids: dict[str, str],
+    bookless: set[str] | None,
+) -> tuple[Decimal | None, str | None]:
+    """Return ``(price, raw_mid)`` for one coin.
+
+    An empty book suppresses the ``allMids`` value. A mid outside 0..1 is dropped.
+    price is None when the venue has no order book for that outcome.
+    """
+    if bookless is not None and _coin_lacks_book(coin, bookless):
+        return None, None
+    mid = mids.get(coin)
+    price = _decimal(mid)
+    if price is None or price < Decimal("0") or price > Decimal("1"):
+        return None, None
+    return price, mid
 
 
 def _parse_order_book(outcome_id: str, coin: str, data: dict[str, Any]) -> OrderBook:

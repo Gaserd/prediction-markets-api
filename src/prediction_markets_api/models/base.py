@@ -40,6 +40,10 @@ class Outcome(BaseModel):
     """An outcome (token) within a market.
 
     Example: "Yes" and "No" for a binary market.
+
+    price is None when the venue has no order book for that outcome. This is
+    guaranteed only for outcomes whose adapter checks the book, which is
+    currently Hyperliquid fallback outcomes.
     """
 
     id: str = Field(description="Venue-specific outcome identifier")
@@ -47,7 +51,12 @@ class Outcome(BaseModel):
     name: str = Field(description="Outcome name (e.g., 'Yes', 'No', or event name)")
     price: Decimal | None = Field(
         None,
-        description="Current price normalized to 0..1 probability",
+        description=(
+            "Current price normalized to 0..1 probability. "
+            "price is None when the venue has no order book for that outcome. "
+            "This is guaranteed only for outcomes whose adapter checks the book, "
+            "which is currently Hyperliquid fallback outcomes."
+        ),
         ge=Decimal("0"),
         le=Decimal("1"),
     )
