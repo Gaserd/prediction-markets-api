@@ -1,0 +1,278 @@
+{
+  "success": true,
+  "cursor": "eyJjcmVhdGVkQXQiOiIyMDI2LTEwLTI0VDAxOjAyOjEwWiIsIm9yZGVySWQiOjYyOTA5MywidHJhbnNhY3Rpb25JZCI6MTgyNTIzNDMzfQ==",
+  "data": [
+    {
+      "market": {
+        "id": 437,
+        "imageUrl": "https://static.predict.fail/who-will-trump-nominate-as-fed-chair-david-malpass",
+        "title": "David Malpass",
+        "question": "Will Trump nominate David Malpass as the next Fed chair?",
+        "description": "This market will resolve according to the next individual Donald Trump, as President of the United States, formally nominates to be Chair of the Federal Reserve by December 31, 2026, 11:59 PM ET. \n\nFormal nominations are defined as the submission of a nomination message to the U.S. Senate.\n\nActing or interim appointments will not count unless the individual is formally nominated to be Chair of the Federal Reserve by submission of a nomination message to the U.S. Senate.\n\nThe primary resolution source for this market will be official information from the U.S. Senate (see: https://www.senate.gov/legislative/nominations_new.htm), however a consensus of credible reporting may also be used.",
+        "tradingStatus": "OPEN",
+        "status": "REGISTERED",
+        "isVisible": true,
+        "isNegRisk": true,
+        "isYieldBearing": false,
+        "feeRateBps": 200,
+        "makerFeeBps": 0,
+        "resolution": null,
+        "oracleQuestionId": "0xc2c54c13073c7f0e2636c2459c556f21192ede2c4d9b8a280eb68b72f2316045",
+        "conditionId": "0xfbc814b46d9ebb059860c87111255d0df03a84d2412cd4b41eb4aaea5a722983",
+        "resolverAddress": "0x52DA245ac170155391e7607c67b77D549005002d",
+        "outcomes": [
+          {
+            "name": "Definitely",
+            "indexSet": 1,
+            "onChainId": "52942861133159413416948390056898167822481351386047208865817464542237738901784",
+            "status": null,
+            "bestBid": {
+              "price": 0.33,
+              "size": 123154.3476
+            },
+            "bestAsk": {
+              "price": 0.37,
+              "size": 519999.6282
+            },
+            "team": null,
+            "variantData": null
+          },
+          {
+            "name": "Maybe",
+            "indexSet": 2,
+            "onChainId": "114777899781313736153277647439696256630388368316924294685715953438441134897814",
+            "status": null,
+            "bestBid": {
+              "price": 0.63,
+              "size": 519999.6282
+            },
+            "bestAsk": {
+              "price": 0.67,
+              "size": 123154.3476
+            },
+            "team": null,
+            "variantData": null
+          }
+        ],
+        "questionIndex": 20,
+        "spreadThreshold": 0.06,
+        "shareThreshold": 100,
+        "isBoosted": true,
+        "boostStartsAt": "2026-01-29T09:00:00.000Z",
+        "boostEndsAt": "2026-01-29T19:53:24.000Z",
+        "polymarketConditionIds": [
+          "0x998acf9ed1bbda06d59df70786441468872c72b2de59cacbea93625b14a5efcb"
+        ],
+        "kalshiMarketTicker": null,
+        "categorySlug": "who-will-trump-nominate-as-fed-chair",
+        "createdAt": "2025-12-05T13:33:29.767Z",
+        "decimalPrecision": 2,
+        "marketVariant": "DEFAULT",
+        "variantData": null,
+        "team": null,
+        "marketType": null,
+        "rewards": {
+          "current": null,
+          "schedule": []
+        }
+      },
+      "taker": {
+        "quoteType": "Ask",
+        "amount": "30000000000000000000",
+        "price": "630000000000000000",
+        "outcome": {
+          "name": "Maybe",
+          "indexSet": 2,
+          "onChainId": "114777899781313736153277647439696256630388368316924294685715953438441134897814",
+          "status": null,
+          "bestBid": {
+            "price": 0.63,
+            "size": 519999.6282
+          },
+          "bestAsk": {
+            "price": 0.67,
+            "size": 123154.3476
+          },
+          "team": null,
+          "variantData": null
+        },
+        "signer": "0x43DD325E628966AF2740277044f7b3Cc2067382d",
+        "hash": "0x31c89270f3bbba3c72d33100f40eb58df9e83e0fc2bb65e1d58dd3e5952972b3",
+        "fee": {
+          "amount": "222000000000000000",
+          "type": "COLLATERAL"
+        }
+      },
+      "amountFilled": "30000000000000000000",
+      "priceExecuted": "630000000000000000",
+      "makers": [
+        {
+          "quoteType": "Bid",
+          "amount": "30000000000000000000",
+          "price": "630000000000000000",
+          "outcome": {
+            "name": "Maybe",
+            "indexSet": 2,
+            "onChainId": "114777899781313736153277647439696256630388368316924294685715953438441134897814",
+            "status": null,
+            "bestBid": {
+              "price": 0.63,
+              "size": 519999.6282
+            },
+            "bestAsk": {
+              "price": 0.67,
+              "size": 123154.3476
+            },
+            "team": null,
+            "variantData": null
+          },
+          "signer": "0x44bBBea76D2593EaC52f17eCfdBFd88E7569B6fC",
+          "hash": "0xbcec015cb8db14783e46d581ef42d624a3b99deec2d83081f894644bd1e29de4",
+          "fee": {
+            "amount": "0",
+            "type": "SHARES"
+          }
+        }
+      ],
+      "transactionHash": "0x0f78ce5e92f96dbe3b414838b5d5cfa8582721fec0e004feb6dfb1d5cf7505f2",
+      "settlementId": "01a16b96-c292-7682-9d8e-74412ff98211",
+      "executedAt": "2026-10-24T01:46:45.000Z"
+    },
+    {
+      "market": {
+        "id": 437,
+        "imageUrl": "https://static.predict.fail/who-will-trump-nominate-as-fed-chair-david-malpass",
+        "title": "David Malpass",
+        "question": "Will Trump nominate David Malpass as the next Fed chair?",
+        "description": "This market will resolve according to the next individual Donald Trump, as President of the United States, formally nominates to be Chair of the Federal Reserve by December 31, 2026, 11:59 PM ET. \n\nFormal nominations are defined as the submission of a nomination message to the U.S. Senate.\n\nActing or interim appointments will not count unless the individual is formally nominated to be Chair of the Federal Reserve by submission of a nomination message to the U.S. Senate.\n\nThe primary resolution source for this market will be official information from the U.S. Senate (see: https://www.senate.gov/legislative/nominations_new.htm), however a consensus of credible reporting may also be used.",
+        "tradingStatus": "OPEN",
+        "status": "REGISTERED",
+        "isVisible": true,
+        "isNegRisk": true,
+        "isYieldBearing": false,
+        "feeRateBps": 200,
+        "makerFeeBps": 0,
+        "resolution": null,
+        "oracleQuestionId": "0xc2c54c13073c7f0e2636c2459c556f21192ede2c4d9b8a280eb68b72f2316045",
+        "conditionId": "0xfbc814b46d9ebb059860c87111255d0df03a84d2412cd4b41eb4aaea5a722983",
+        "resolverAddress": "0x52DA245ac170155391e7607c67b77D549005002d",
+        "outcomes": [
+          {
+            "name": "Definitely",
+            "indexSet": 1,
+            "onChainId": "52942861133159413416948390056898167822481351386047208865817464542237738901784",
+            "status": null,
+            "bestBid": {
+              "price": 0.33,
+              "size": 123154.3476
+            },
+            "bestAsk": {
+              "price": 0.37,
+              "size": 519999.6282
+            },
+            "team": null,
+            "variantData": null
+          },
+          {
+            "name": "Maybe",
+            "indexSet": 2,
+            "onChainId": "114777899781313736153277647439696256630388368316924294685715953438441134897814",
+            "status": null,
+            "bestBid": {
+              "price": 0.63,
+              "size": 519999.6282
+            },
+            "bestAsk": {
+              "price": 0.67,
+              "size": 123154.3476
+            },
+            "team": null,
+            "variantData": null
+          }
+        ],
+        "questionIndex": 20,
+        "spreadThreshold": 0.06,
+        "shareThreshold": 100,
+        "isBoosted": true,
+        "boostStartsAt": "2026-01-29T09:00:00.000Z",
+        "boostEndsAt": "2026-01-29T19:53:24.000Z",
+        "polymarketConditionIds": [
+          "0x998acf9ed1bbda06d59df70786441468872c72b2de59cacbea93625b14a5efcb"
+        ],
+        "kalshiMarketTicker": null,
+        "categorySlug": "who-will-trump-nominate-as-fed-chair",
+        "createdAt": "2025-12-05T13:33:29.767Z",
+        "decimalPrecision": 2,
+        "marketVariant": "DEFAULT",
+        "variantData": null,
+        "team": null,
+        "marketType": null,
+        "rewards": {
+          "current": null,
+          "schedule": []
+        }
+      },
+      "taker": {
+        "quoteType": "Bid",
+        "amount": "100000000000000000000",
+        "price": "360000000000000000",
+        "outcome": {
+          "name": "Definitely",
+          "indexSet": 1,
+          "onChainId": "52942861133159413416948390056898167822481351386047208865817464542237738901784",
+          "status": null,
+          "bestBid": {
+            "price": 0.33,
+            "size": 123154.3476
+          },
+          "bestAsk": {
+            "price": 0.37,
+            "size": 519999.6282
+          },
+          "team": null,
+          "variantData": null
+        },
+        "signer": "0xf7817B86bE0324673490Eb4A907fFeDB5De14137",
+        "hash": "0xa3621181e3a3eedf7638e7fd09a7bb9ab95fef430e321974b844ec0449f49440",
+        "fee": {
+          "amount": "2000000000000000000",
+          "type": "SHARES"
+        }
+      },
+      "amountFilled": "100000000000000000000",
+      "priceExecuted": "360000000000000000",
+      "makers": [
+        {
+          "quoteType": "Bid",
+          "amount": "100000000000000000000",
+          "price": "640000000000000000",
+          "outcome": {
+            "name": "Maybe",
+            "indexSet": 2,
+            "onChainId": "114777899781313736153277647439696256630388368316924294685715953438441134897814",
+            "status": null,
+            "bestBid": {
+              "price": 0.63,
+              "size": 519999.6282
+            },
+            "bestAsk": {
+              "price": 0.67,
+              "size": 123154.3476
+            },
+            "team": null,
+            "variantData": null
+          },
+          "signer": "0x43DD325E628966AF2740277044f7b3Cc2067382d",
+          "hash": "0x53990b469766cc37eff4868eb517fa2bd3b4a15c81b10a3a4f385d7d9f16229b",
+          "fee": {
+            "amount": "0",
+            "type": "SHARES"
+          }
+        }
+      ],
+      "transactionHash": "0xd1cb102190071eab4b2db02f75b5c8a2e5d1844767c4191541487c944c0dfbc5",
+      "settlementId": "01a16b6d-f40e-7e53-8e72-0fd90eb0bd76",
+      "executedAt": "2026-10-24T01:02:10.000Z"
+    }
+  ]
+}

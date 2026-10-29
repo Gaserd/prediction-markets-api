@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A unified Python client for prediction markets. Currently supports **Polymarket**, **Kalshi**, **Limitless**, **Hyperliquid Outcomes (HIP-4)**, and **Pascal** (Solana, beta).
+A unified Python client for prediction markets. Currently supports **Polymarket**, **Kalshi**, **Limitless**, **Hyperliquid Outcomes (HIP-4)**, **Pascal** (Solana, beta), and **Predict.fun** (BNB Chain).
 
 ## Features
 
@@ -164,6 +164,9 @@ All venues return data through a unified model with strict guarantees:
 | | `settled` | `RESOLVED` | True | Loaded by id via `settledOutcome`. `settleFraction` `1` / `0` sets the winning side |
 | **Pascal** | `live` | `OPEN` | False | Unresolved market from `GET /api/v1/markets`. `price` is `None` unless both best bid and best ask are present |
 | | `resolved` | `RESOLVED` | True | `resolution.price` of `1` / `0` names the long / short outcome. Listed via `GET /api/v1/markets/resolved` |
+| **Predict.fun** | `REGISTERED`, `PRICE_PROPOSED`, `PRICE_DISPUTED` with trading `OPEN` | `OPEN` | False | `OPEN` means a new order can be placed. `price` is `None` unless both best bid and best ask are present |
+| | `REMOVED`, lifecycle `PAUSED`, or trading `CLOSED`, `PAUSED`, `CANCEL_ONLY`, `MATCHING_NOT_ENABLED` | `CLOSED` | False | Raw lifecycle `status` stays on `venue_status`. Both `status` and `tradingStatus` stay on `raw_data`. `status=OPEN` pages can include these; `list_markets(closed=False)` drops them |
+| | `RESOLVED` | `RESOLVED` | True | Winning outcome price is `1` and the others are `0`. Listed with `status=RESOLVED` |
 
 **Notes:**
 - Kalshi filter parameter names differ from response status values. The table shows response values with filter parameters in parentheses.
@@ -176,6 +179,7 @@ All venues return data through a unified model with strict guarantees:
 - Limitless only exposes `FUNDED` markets via `/markets/active` endpoint. Calling `list_markets(closed=True)` raises `NotImplementedError` with a clear explanation, since the API does not provide an endpoint for closed/resolved markets.
 - Hyperliquid Outcomes lists live markets from `outcomeMeta` only. `list_markets(closed=True)` raises `NotImplementedError`. A single settled outcome can still be loaded with `get_market` when its numeric id is known (`settledOutcome`). `recentTrades` is one short window with no cursor, and `l2Book` returns at most 20 levels per side. `price` is `None` for a fallback outcome only after this adapter checks that outcome's book.
 - Pascal (beta, Solana) lists unresolved markets from `GET /api/v1/markets` and resolved markets from `GET /api/v1/markets/resolved` (lookback `4h`, `24h`, or `3d` only). See [Pascal](#pascal).
+- Predict.fun (BNB Chain) lists open markets with `GET /v1/markets?status=OPEN` and resolved markets with `status=RESOLVED`. Mainnet reads require `PREDICTFUN_API_KEY`. See [Predict.fun](#predictfun).
 
 ### Adapter Architecture
 
@@ -214,7 +218,7 @@ asyncio.run(main())
 
 ### API Keys and Configuration
 
-**Version 0.9 (Read-Only):** No authentication required. All market data, prices, order books, and trades are accessible without API keys.
+**Version 0.9 (Read-Only):** Polymarket, Kalshi, Limitless, Hyperliquid Outcomes, and Pascal serve market data, prices, order books, and trades without an API key. Predict.fun mainnet reads require `PREDICTFUN_API_KEY` (the `x-api-key` header). The public testnet does not.
 
 **Trading (Planned for 1.0):** Will require API keys via environment variables.
 
@@ -225,6 +229,7 @@ Be aware of venue restrictions:
 - **Kalshi**: US only (CFTC regulated)
 - **Limitless**: No restrictions (planned)
 - **Pascal**: Restricted by venue ToS: US, UK, Russia (see ToS for the full list). Terms: https://app.pascal.trade/terms.pdf. The product is in beta.
+- **Predict.fun**: Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, Thailand, Australia, Belgium, Taiwan (see ToS for the full list). Terms: https://docs.predict.fun/terms-of-service. Mainnet reads require an API key.
 
 ### Exception Hierarchy
 
@@ -237,6 +242,7 @@ from prediction_markets_api import (
     NoLiquidityError,  # Empty order book for existing market
     VenueAPIError,  # HTTP errors, invalid responses
     RateLimitError,  # HTTP 429 rate limit
+    AuthenticationError,  # Missing or rejected API key
 )
 ```
 
@@ -256,6 +262,9 @@ from prediction_markets_api import (
 - **`RateLimitError`**: Rate limit exceeded (HTTP 429)
   - Subclass of `VenueAPIError`
   - Attributes: `retry_after` (seconds, from Retry-After header if available)
+- **`AuthenticationError`**: API key missing or rejected (HTTP 401)
+  - Subclass of `VenueAPIError`
+  - Predict.fun mainnet raises this when `PREDICTFUN_API_KEY` is unset or the venue rejects the key. The message does not include the key.
 
 **User Input Errors:**
 - `ValueError`: Invalid parameters (e.g., price not in 0..1, negative size)
@@ -371,6 +380,9 @@ See [examples/README.md](examples/README.md) for details.
 export POLYMARKET_API_KEY="your_key"
 export POLYMARKET_API_SECRET="your_secret"
 export POLYMARKET_WALLET_ADDRESS="0x..."
+
+# Predict.fun mainnet reads. Testnet does not need this. Never commit the key.
+export PREDICTFUN_API_KEY="your_key"
 ```
 
 **Never hardcode API keys in your code.**
@@ -393,11 +405,14 @@ This library is free and open source (MIT). Some links below are **referral link
 | Kalshi | [kalshi.com](https://kalshi.com) | no | yes |  |
 | Hyperliquid Outcomes (HIP-4) | [hyperliquid.xyz](https://hyperliquid.xyz) | no | no |  |
 | Pascal | [app.pascal.trade](https://app.pascal.trade) | no | yes |  |
+| Predict.fun | [predict.fun](https://predict.fun) | no | yes |  |
 <!-- venues-table:end -->
 
 Hyperliquid Outcomes limits: trades have no pagination (`recentTrades` only), the order book has at most 20 levels per side, and closed markets cannot be listed. Each `list_markets` or `get_market` call also sends one side-0 `l2Book` per priced question fallback (info weight 2). Those checks run at most 8 at a time and are not cached on the client. A full live listing on 2026-10-28 was 34 `l2Book` calls (weight 68). With `outcomeMeta` (weight 20), `outcomeTemplates` (weight 20), and `allMids` (weight 2) that is weight 110 of the 1200 per minute per IP budget, about 10 full listings a minute. Wall time is around 6 s (about 6.2 s with these checks, about 2.8 s on main). The recorded fixture asks for 25, because fallback 8656 is omitted from its question. An empty book sets that leg's `price` to `None` instead of the `0.5` `allMids` mid. If a check fails (404, 429, 5xx, or timeout), that leg's `price` is `None`, one warning is emitted, and the listing continues.
 
 Referral links are defined in `src/prediction_markets_api/venues.py` (the same registry that generates this table), so you can see exactly what is linked and change it in a fork.
+
+Predict.fun rate limits are per API key. `/v1/markets` and `/v1/markets/{id}` allow 240 requests per minute. `/v1/markets/{id}/orderbook`, `/quote`, and `/v1/orders/matches` share a separate bucket of 500 requests per minute. `GET /v1/markets` pages with `first` (server default 20, silently clamped to 100, no documented maximum) and `after`. `GET /v1/orders/matches` defaults `first` to 50 and clamps it to 150; this client sends 100. The public testnet does not require a key.
 
 Trading and builder-code attribution are not part of 0.9 (read-only). How builder codes will work, what they cost and how to turn them off will be documented here before 1.0.
 
@@ -411,7 +426,7 @@ Sign-up links and referral disclosure: see [Venues & referral links](#venues--re
 | Kalshi | None | ✅ Implemented | ✅ | — | No | Yes | US only | [Link](https://kalshi.com) |
 | Limitless | Base | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://limitless.exchange) |
 | Hyperliquid Outcomes (HIP-4) | Hyperliquid | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
-| Predict.fun | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://predict.fun) |
+| Predict.fun | BNB Chain | ✅ Implemented | ✅ | — | Yes | Yes | Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, Thailand, Australia, Belgium, Taiwan (see ToS for the full list) | [Link](https://predict.fun) |
 | Opinion | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://opinion.finance) |
 | Pascal | Solana | ✅ Implemented | ✅ | — | No | Yes | Restricted by venue ToS: US, UK, Russia (see ToS for the full list) | [Link](https://app.pascal.trade) |
 | SX Bet | Arbitrum | 🚧 Planned | — | — | No | Yes | None | [Link](https://sx.bet) |
@@ -484,6 +499,65 @@ The docs say limits may change and that clients must handle HTTP 429 (`RATE_LIMI
 **Not in this adapter**
 
 Trading (`place_order` validates a dry-run and does not submit), websockets, candles, and account or position reads. `GET /api/v1/accounts/{owner}/position-resolutions` gained an optional `symbols` filter of up to 100 symbols on 2026-10-27. Positions are planned for 1.0 and are not implemented.
+
+## Predict.fun
+
+Predict.fun is a prediction market on **BNB Chain**. The read client talks to `https://api.predict.fun`. Docs: [dev.predict.fun](https://dev.predict.fun/). Live OpenAPI: [api.predict.fun/docs](https://api.predict.fun/docs). Terms: [docs.predict.fun/terms-of-service](https://docs.predict.fun/terms-of-service).
+
+Mainnet requires an API key from https://developers.predict.fun
+
+Mainnet requires an API key in `PREDICTFUN_API_KEY`, sent as the `x-api-key` header. The key is read only from that environment variable. It is not logged, and `repr` shows `***` when it is set. A missing key raises `AuthenticationError` before the request. HTTP 401 raises the same error. The public testnet (`https://api-testnet.predict.fun`) does not require a key. Pass it as `base_url`. JWT bearer auth is only for order actions and is not used.
+
+### Example
+
+```python
+import asyncio
+import os
+
+from prediction_markets_api import PredictFunClient
+
+
+async def main():
+    # Mainnet reads require PREDICTFUN_API_KEY. Testnet does not.
+    base_url = None if os.getenv("PREDICTFUN_API_KEY") else PredictFunClient.TESTNET_API_BASE
+    async with PredictFunClient(base_url=base_url) as client:
+        markets = [market async for market in client.list_markets(closed=False, limit=2)]
+        for market in markets:
+            price = market.outcomes[0].price if market.outcomes else None
+            shown = "n/a" if price is None else f"{price:.2%}"
+            print(f"{market.question}: {shown}")
+
+
+asyncio.run(main())
+```
+
+**Supported**
+
+- `list_markets` — `GET /v1/markets`, paged with `first` and `after`. The server default for `first` is 20. Values above 100 are silently clamped to 100, and the docs do not publish a maximum. This client sends at most 100. `closed=False` sends `status=OPEN` and then drops markets that are not tradable (`PAUSED`, `CANCEL_ONLY`, `MATCHING_NOT_ENABLED`, lifecycle `REMOVED` or `PAUSED`). `closed=True` sends `status=RESOLVED`. `closed=None` omits `status`. `limit` stops before the next page. A repeated cursor stops the iterator and logs one warning.
+- `venue_params` — `sort`, `market_variant` (`marketVariant`), and `tag_ids` (`tagIds`). Any other key raises `ValueError` before the request.
+- `get_market` — `GET /v1/markets/{id}`. HTTP 404 is `NotFoundError`.
+- `get_order_book` / `get_price` — `GET /v1/markets/{id}/orderbook`. The endpoint has no `indexSet` parameter. It always returns the indexSet 1 book. Outcome names are arbitrary. `indexSet` 2 is the complement (`1 - price`, sides swapped). Outcome ids are `{market_id}:{index_set}:{on_chain_id}`. A bare market id addresses the indexSet-1 book. A full id whose `onChainId` is not on the market raises `NotFoundError` before the book request. An empty side makes `get_price` raise `NoLiquidityError`. An unknown market is HTTP 404.
+- `get_trades` / `iter_trades` — `GET /v1/orders/matches?marketId=...`, newest first, paged with `first` and `after`. The server default for `first` is 50 and values above 150 are clamped to 150. This client sends 100. No JWT. `priceExecuted` and `amountFilled` are 18-decimal wei strings (USDT collateral); this client divides by `10**18`. Taker `quoteType` `Bid` is `BUY` and `Ask` is `SELL`. A full outcome id is checked with `get_market` before any match request, then prints for other outcomes are dropped on the client. An empty page for an unknown market is `NotFoundError`.
+
+**Prices and units**
+
+Outcome prices and book levels are probabilities in `[0, 1]`. `decimalPrecision` is the number of decimal places. The tick is `10 ** -decimalPrecision` (`2` → `0.01`, `3` → `0.001` on the testnet snapshot recorded 2026-10-29). The book payload does not include it, so `OrderBook.tick_size` is unset. `spreadThreshold` and `shareThreshold` are venue liquidity-program thresholds, not the tick and not `min_order_size`.
+
+`Outcome.price` is the mid when both `bestBid` and `bestAsk` exist. Those outcome fields are deprecated by the venue. When either field is missing, `price` is `None` and `raw_price` is `None`. A resolved market sets the winning outcome to `1` and the others to `0`.
+
+Book sizes are share counts. Match amounts are wei. `stats.volumeTotalUsd` maps to `Market.volume`. `stats.totalLiquidityUsd` stays on `raw_data` only (`Market.liquidity` is `None`). Reported stats are USD notionals. The settlement token is USDT.
+
+**Rate limits**
+
+Per API key: 240 requests per minute for `/v1/markets` and `/v1/markets/{id}`. `/v1/markets/{id}/orderbook`, `/quote`, and `/v1/orders/matches` share a separate bucket of 500 requests per minute (testnet `ratelimit-policy` headers, observed 2026-10-29). HTTP 429 maps to `RateLimitError`. `Retry-After` is used when present, otherwise `ratelimit-reset` (seconds).
+
+**Known issues**
+
+A long testnet walk of `GET /v1/markets` can hit a venue-side HTTP 500 on a deep page (observed after the cursor for id 3882684 when `first` is 90 or more). There is no client workaround. `list_markets` raises `VenueAPIError`. The message includes the page number and the cursor of the failed request, and the listing does not finish as a successful partial result.
+
+**Not in this adapter**
+
+Trading (`place_order` validates a dry-run and does not submit), websockets, order placement, and account or position reads.
 
 ## Development
 

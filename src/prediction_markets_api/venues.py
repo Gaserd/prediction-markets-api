@@ -23,6 +23,7 @@ class Chain(str, Enum):
     BASE = "Base"
     SOLANA = "Solana"
     HYPERLIQUID = "Hyperliquid"
+    BNB = "BNB Chain"
     NONE = "None"  # Centralized / no blockchain
 
 
@@ -112,18 +113,26 @@ VENUES: dict[str, VenueInfo] = {
     ),
     "predict_fun": VenueInfo(
         name="Predict.fun",
-        chain=Chain.BASE,
-        geo_restrictions=None,
-        api_key_for_read=False,
+        # BNB Chain per the API FAQ and the Terms (https://docs.predict.fun/terms-of-service).
+        chain=Chain.BNB,
+        # Notice list in the Terms. The Restricted Jurisdictions section also
+        # names US-sanctioned territories and is not exhaustive.
+        # https://docs.predict.fun/terms-of-service
+        geo_restrictions=(
+            "Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, "
+            "Thailand, Australia, Belgium, Taiwan (see ToS for the full list)"
+        ),
+        api_key_for_read=True,  # Mainnet x-api-key. Testnet reads do not need a key.
         api_key_for_trade=True,
-        can_read=False,
-        can_trade=False,
-        status=VenueStatus.PLANNED,
+        can_read=True,
+        can_trade=False,  # Stub only; place_order does not submit
+        status=VenueStatus.IMPLEMENTED,
         signup_link_key="predict_fun",
-        liquidity_source=None,  # Unknown until implemented
+        # totalLiquidityUsd is nested under stats, not a top-level raw field.
+        liquidity_source=None,
         url="https://predict.fun",
         referral_url=None,
-        supports_closed_markets=False,
+        supports_closed_markets=True,  # GET /v1/markets?status=RESOLVED
     ),
     "opinion": VenueInfo(
         name="Opinion",

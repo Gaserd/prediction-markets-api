@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-10-29T09:34:18.930413+00:00",
+  "method": "GET",
+  "url": "https://api-testnet.predict.fun/v1/markets/437",
+  "status": 200,
+  "request": {
+    "url": "https://api-testnet.predict.fun/v1/markets/437",
+    "method": "GET"
+  },
+  "environment": "testnet",
+  "note": "Recorded from the public testnet because mainnet reads require PREDICTFUN_API_KEY and return HTTP 401 without it. The testnet payload uses the same read schema.",
+  "description": "Live testnet GET /v1/markets/437",
+  "token_id": "437:1:52942861133159413416948390056898167822481351386047208865817464542237738901784"
+}

@@ -12,6 +12,7 @@ from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.limitless import LimitlessClient
 from prediction_markets_api.adapters.pascal import PascalClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
+from prediction_markets_api.adapters.predict_fun import PredictFunClient
 
 READ_CLIENTS: list[type[BaseClient]] = [
     PolymarketClient,
@@ -19,6 +20,7 @@ READ_CLIENTS: list[type[BaseClient]] = [
     LimitlessClient,
     HyperliquidClient,
     PascalClient,
+    PredictFunClient,
 ]
 
 

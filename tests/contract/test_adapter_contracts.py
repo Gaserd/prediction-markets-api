@@ -60,6 +60,10 @@ def mock_order_book(adapter_name: str, payload: Any) -> Any:
         return respx.get(url__regex=r".*/orderbook.*").mock(
             return_value=Response(200, json=payload)
         )
+    if adapter_name == "predict_fun":
+        return respx.get(url__regex=r".*/orderbook.*").mock(
+            return_value=Response(200, json=payload)
+        )
     return respx.get(url__regex=r".*/book.*").mock(return_value=Response(200, json=payload))
 
 
@@ -69,6 +73,8 @@ def mock_trades(adapter_name: str, payload: Any) -> Any:
         return respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=payload))
     if adapter_name == "limitless":
         return respx.get(url__regex=r".*/events.*").mock(return_value=Response(200, json=payload))
+    if adapter_name == "predict_fun":
+        return respx.get(url__regex=r".*/matches.*").mock(return_value=Response(200, json=payload))
     return respx.get(url__regex=r".*/trades.*").mock(return_value=Response(200, json=payload))
 
 
@@ -85,8 +91,12 @@ def adapter_fixtures(adapter_config):
 
 
 @pytest.fixture
-async def adapter_client(adapter_config) -> BaseClient:
+async def adapter_client(adapter_config, monkeypatch: pytest.MonkeyPatch) -> BaseClient:
     """Create adapter client instance."""
+    # Mainnet reads require a key. The value is a placeholder, not a secret,
+    # and it is only sent to the mocked transport.
+    if adapter_config.name == "predict_fun":
+        monkeypatch.setenv("PREDICTFUN_API_KEY", "test-key")
     client = adapter_config.client_class()
     try:
         yield client
@@ -618,6 +628,17 @@ async def test_list_markets_respects_limit(adapter_config, adapter_fixtures, ada
     # Pascal's unresolved listing is one GET /markets snapshot. limit stops
     # the iterator and must not request the resolved listing as well.
     if adapter_config.name == "pascal":
+        with respx.mock:
+            route = respx.get(url__regex=r".*/markets.*").mock(
+                return_value=Response(200, json=data)
+            )
+            markets = [market async for market in adapter_client.list_markets(limit=1)]
+            assert len(markets) == 1
+            assert route.call_count == 1
+        return
+
+    # Predict.fun pages with `after`. limit=1 must not request the next cursor.
+    if adapter_config.name == "predict_fun":
         with respx.mock:
             route = respx.get(url__regex=r".*/markets.*").mock(
                 return_value=Response(200, json=data)
@@ -1198,6 +1219,8 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             mock_data = {"data": []}
         elif adapter_config.name == "hyperliquid":
             mock_data = {"outcomes": [], "questions": []}
+        elif adapter_config.name == "predict_fun":
+            mock_data = {"success": True, "cursor": None, "data": []}
         else:
             mock_data = []
 
@@ -1229,6 +1252,9 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             assert "closed" not in params
             assert "status" not in params
             assert json.loads(request.content)["type"] == "outcomeMeta"
+        elif adapter_config.name == "predict_fun":
+            assert params.get("status") == "OPEN"
+            assert "closed" not in params
 
         # Test closed=True (Limitless and Hyperliquid raise NotImplementedError)
         if adapter_config.name == "hyperliquid":
@@ -1257,6 +1283,9 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
                 assert params.get("status") in ["closed", "settled"], (
                     f"Kalshi closed=True must send status=closed or status=settled, got {params.get('status')}"
                 )
+            elif adapter_config.name == "predict_fun":
+                assert params.get("status") == "RESOLVED"
+                assert "closed" not in params
 
         # Test closed=None (no filter)
         route.calls.clear()
@@ -1283,6 +1312,9 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             assert "status" not in params, "Hyperliquid closed=None must not send status param"
             assert "closed" not in params, "Hyperliquid closed=None must not send closed param"
             assert json.loads(request.content)["type"] == "outcomeMeta"
+        elif adapter_config.name == "predict_fun":
+            assert "status" not in params, "Predict.fun closed=None must not send status param"
+            assert "closed" not in params, "Predict.fun closed=None must not send closed param"
 
 
 # =============================================================================
@@ -1358,6 +1390,29 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                 "seq": str(1000 + index),
                 "trade_ts_ms": str(1791697593000 + index),
             }
+        elif adapter_config.name == "predict_fun":
+            # Match events. priceExecuted and amountFilled are 18-decimal wei.
+            # Prices stay inside 0.50–0.59.
+            cents = 50 + (index % 10)
+            wei_price = str(cents * 10**16)
+            wei_size = str((10 + index) * 10**18)
+            return {
+                "transactionHash": f"0x{index:064x}",
+                "executedAt": f"2026-10-24T01:{index % 60:02d}:45.000Z",
+                "priceExecuted": wei_price,
+                "amountFilled": wei_size,
+                "taker": {
+                    "quoteType": "Bid" if index % 2 == 0 else "Ask",
+                    "price": wei_price,
+                    "amount": wei_size,
+                    "outcome": {
+                        "name": "Yes",
+                        "indexSet": 1,
+                        "onChainId": "1",
+                        "status": None,
+                    },
+                },
+            }
         raise AssertionError(f"no synthetic trade for {adapter_config.name}")
 
     outcome_id = "test_market_123"
@@ -1384,6 +1439,18 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                     "status": "success",
                     "data": data_obj,
                     "server_time_ms": "1791697593000",
+                }
+            )
+    elif adapter_config.name == "predict_fun":
+        # Three cursor pages, same shape as GET /v1/orders/matches.
+        for page_num in range(1, 4):
+            start_idx = (page_num - 1) * 50
+            trades_page = [build_trade(i) for i in range(start_idx, start_idx + 50)]
+            pages.append(
+                {
+                    "success": True,
+                    "cursor": f"cursor_{page_num}" if page_num < 3 else None,
+                    "data": trades_page,
                 }
             )
     else:
@@ -1418,6 +1485,8 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                     return Response(200, json=[])
                 elif adapter_config.name == "pascal":
                     return Response(200, json={"status": "success", "data": {"items": []}})
+                elif adapter_config.name == "predict_fun":
+                    return Response(200, json={"success": True, "cursor": None, "data": []})
                 else:
                     return Response(200, json={"events": []})
 
@@ -1432,6 +1501,8 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
             route = respx.post(HYPERLIQUID_INFO).mock(side_effect=get_next_page)
         elif adapter_config.name == "pascal":
             route = respx.get(url__regex=r".*/trades.*").mock(side_effect=get_next_page)
+        elif adapter_config.name == "predict_fun":
+            route = respx.get(url__regex=r".*/matches.*").mock(side_effect=get_next_page)
 
         # Test with explicit limit=5 (should fetch exactly 5 from first page)
         page_index[0] = 0

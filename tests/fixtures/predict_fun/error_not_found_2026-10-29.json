@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "code": 404,
+  "error": "not_found",
+  "message": "market not found",
+  "timestamp": "2026-10-29T09:34:23.213762445Z",
+  "trace": "3ef3e6e9a9adb0e18f6344cd185f0e57"
+}

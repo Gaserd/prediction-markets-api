@@ -1,0 +1,75 @@
+{
+  "data": {
+    "boostEndsAt": null,
+    "boostStartsAt": null,
+    "categorySlug": "3dp",
+    "conditionId": "0x66ef3c8c239df5d6a81a8516d37980d3a60990f36ced9112abae81a43c03b02f",
+    "createdAt": "2026-01-06T12:42:19.424Z",
+    "decimalPrecision": 3,
+    "description": "3dpA",
+    "feeRateBps": 200,
+    "id": 1502,
+    "imageUrl": "https://static.predict.fail/3dp-3-dp-a",
+    "isBoosted": false,
+    "isNegRisk": true,
+    "isVisible": true,
+    "isYieldBearing": false,
+    "kalshiMarketTicker": null,
+    "makerFeeBps": 0,
+    "marketType": null,
+    "marketVariant": "DEFAULT",
+    "oracleQuestionId": "0x7f7b159bc83ad38e687b7a1e8ff611390b91c85dfd4a09a3c57c0e3934562505",
+    "outcomes": [
+      {
+        "bestAsk": {
+          "price": 0.67,
+          "size": 40053.7934
+        },
+        "bestBid": {
+          "price": 0.25,
+          "size": 86.3967
+        },
+        "indexSet": 1,
+        "name": "Yes",
+        "onChainId": "11275982520147158666459454188812222656681603050710516133352887822837701404480",
+        "status": null,
+        "team": null,
+        "variantData": null
+      },
+      {
+        "bestAsk": {
+          "price": 0.75,
+          "size": 86.3967
+        },
+        "bestBid": {
+          "price": 0.33,
+          "size": 40053.7934
+        },
+        "indexSet": 2,
+        "name": "No",
+        "onChainId": "70077715186746250276106992588412890609572239701628379795441985179833924734414",
+        "status": null,
+        "team": null,
+        "variantData": null
+      }
+    ],
+    "polymarketConditionIds": [],
+    "question": "3dpA",
+    "questionIndex": 0,
+    "resolution": null,
+    "resolverAddress": "0x52DA245ac170155391e7607c67b77D549005002d",
+    "rewards": {
+      "current": null,
+      "schedule": []
+    },
+    "shareThreshold": 100,
+    "spreadThreshold": 0.06,
+    "stats": null,
+    "status": "REGISTERED",
+    "team": null,
+    "title": "3dpA",
+    "tradingStatus": "OPEN",
+    "variantData": null
+  },
+  "success": true
+}

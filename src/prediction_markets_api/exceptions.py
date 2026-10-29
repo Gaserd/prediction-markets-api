@@ -101,3 +101,49 @@ class NoLiquidityError(PredictionMarketsError):
         super().__init__(message)
         self.market_id = market_id
         self.side = side
+
+
+class AuthenticationError(PredictionMarketsError, PermissionError):
+    """Missing credentials, or the venue rejected the caller (HTTP 401/403).
+
+    Subclasses the builtin ``PermissionError`` as well as
+    ``PredictionMarketsError``, so an existing ``except PermissionError``
+    handler still catches it. No separate deprecated alias is defined.
+
+    Attributes:
+        venue: Venue name (for example ``"polymarket"``), if known.
+        status_code: HTTP status when the venue responded, otherwise None.
+        hint: Remediation text, such as which env vars to set or that a
+            Limitless token needs the ``trading`` scope.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        venue: str | None = None,
+        status_code: int | None = None,
+        hint: str | None = None,
+    ) -> None:
+        """Initialize AuthenticationError.
+
+        Args:
+            message: Error message
+            venue: Venue name (e.g., "polymarket", "kalshi", "limitless")
+            status_code: HTTP status code if the venue responded
+            hint: How to fix the failure (env vars, token scope)
+        """
+        super().__init__(message)
+        self.venue = venue
+        self.status_code = status_code
+        self.hint = hint
+
+    def __str__(self) -> str:
+        parts = [super().__str__()]
+        if self.venue:
+            parts.append(f"venue={self.venue}")
+        if self.status_code:
+            parts.append(f"status={self.status_code}")
+        if self.hint:
+            parts.append(f"hint={self.hint}")
+        return " | ".join(parts)

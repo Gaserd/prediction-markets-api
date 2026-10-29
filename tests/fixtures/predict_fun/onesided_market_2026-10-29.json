@@ -1,0 +1,71 @@
+{
+  "data": {
+    "boostEndsAt": "2026-01-29T19:53:24.000Z",
+    "boostStartsAt": "2026-01-29T09:00:00.000Z",
+    "categorySlug": "who-will-trump-nominate-as-fed-chair",
+    "conditionId": "0xf643575bee59f9ea7754eaad788e27aae0c1cb10641d33f21bbf1b6adf379b8e",
+    "createdAt": "2025-12-05T13:33:48.704Z",
+    "decimalPrecision": 2,
+    "description": "This market will resolve according to the next individual Donald Trump, as President of the United States, formally nominates to be Chair of the Federal Reserve by December 31, 2026, 11:59 PM ET. \n\nFormal nominations are defined as the submission of a nomination message to the U.S. Senate.\n\nActing or interim appointments will not count unless the individual is formally nominated to be Chair of the Federal Reserve by submission of a nomination message to the U.S. Senate.\n\nThe primary resolution source for this market will be official information from the U.S. Senate (see: https://www.senate.gov/legislative/nominations_new.htm), however a consensus of credible reporting may also be used.",
+    "feeRateBps": 200,
+    "id": 446,
+    "imageUrl": "https://static.predict.fail/who-will-trump-nominate-as-fed-chair-james-bullard",
+    "isBoosted": true,
+    "isNegRisk": true,
+    "isVisible": true,
+    "isYieldBearing": false,
+    "kalshiMarketTicker": null,
+    "makerFeeBps": 0,
+    "marketType": null,
+    "marketVariant": "DEFAULT",
+    "oracleQuestionId": "0x19c7f43ea508b101420d36796f72f298a85aa10204a1a30ec2732f1ad0a8f355",
+    "outcomes": [
+      {
+        "bestAsk": {
+          "price": 0.07,
+          "size": 219468.9127
+        },
+        "bestBid": null,
+        "indexSet": 1,
+        "name": "Yes",
+        "onChainId": "77010271411606434731457793367655829981800371742873969952312004022186180389238",
+        "status": null,
+        "team": null,
+        "variantData": null
+      },
+      {
+        "bestAsk": null,
+        "bestBid": {
+          "price": 0.93,
+          "size": 219468.9127
+        },
+        "indexSet": 2,
+        "name": "No",
+        "onChainId": "33620787682997816327882321712066606655599547971748098149124882883729687513822",
+        "status": null,
+        "team": null,
+        "variantData": null
+      }
+    ],
+    "polymarketConditionIds": [
+      "0x582c62c350aac2720711abeb30b16c41c5cdc9b342bfa30da380b6ea6bdeb1ac"
+    ],
+    "question": "Will Trump nominate James B. Bullard as the next Fed chair?",
+    "questionIndex": 8,
+    "resolution": null,
+    "resolverAddress": "0x52DA245ac170155391e7607c67b77D549005002d",
+    "rewards": {
+      "current": null,
+      "schedule": []
+    },
+    "shareThreshold": 100,
+    "spreadThreshold": 0.06,
+    "stats": null,
+    "status": "REGISTERED",
+    "team": null,
+    "title": "James Bullard",
+    "tradingStatus": "OPEN",
+    "variantData": null
+  },
+  "success": true
+}
