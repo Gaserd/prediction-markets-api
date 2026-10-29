@@ -743,7 +743,7 @@ class PredictFunClient(BaseClient):
         host = urlparse(self._base_url).hostname
         return host is not None and host.lower() == _MAINNET_HOST
 
-    def _read_headers(self, url: str) -> dict[str, str]:
+    def _read_headers(self) -> dict[str, str]:
         """Headers for one read. The key is not logged."""
         if self._requires_api_key() and not self._api_key:
             raise AuthenticationError(
@@ -751,7 +751,7 @@ class PredictFunClient(BaseClient):
                 f"Set the {_API_KEY_ENV} environment variable. "
                 f"The key is sent as the {_API_KEY_HEADER} header and is not logged.",
                 venue=_VENUE,
-                url=url,
+                hint=f"Set the {_API_KEY_ENV} environment variable.",
             )
         headers = {"Accept": "application/json"}
         if self._api_key:
@@ -871,7 +871,7 @@ class PredictFunClient(BaseClient):
         into the error message.
         """
         url = f"{self._base_url}{path}"
-        headers = self._read_headers(url)
+        headers = self._read_headers()
         try:
             response = await self._http_client.request(method, url, params=params, headers=headers)
         except httpx.HTTPError as exc:
@@ -888,7 +888,7 @@ class PredictFunClient(BaseClient):
                     _auth_rejected_message(),
                     status_code=response.status_code,
                     venue=_VENUE,
-                    url=str(response.request.url),
+                    hint=f"Check the {_API_KEY_ENV} environment variable.",
                 ) from exc
             if response.status_code == 429:
                 raise RateLimitError(
@@ -910,7 +910,7 @@ class PredictFunClient(BaseClient):
                 _auth_rejected_message(),
                 status_code=401,
                 venue=_VENUE,
-                url=str(response.request.url),
+                hint=f"Check the {_API_KEY_ENV} environment variable.",
             )
         if response.status_code == 404 or code == 404 or error == "not_found":
             raise NotFoundError(

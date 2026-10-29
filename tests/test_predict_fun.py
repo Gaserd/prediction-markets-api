@@ -303,6 +303,24 @@ async def test_repeated_trade_cursor_stops(
     assert SECRET not in caplog.text
 
 
+def test_authentication_error_is_caught_as_permission_error() -> None:
+    """An existing ``except PermissionError`` handler still catches this error."""
+    try:
+        raise AuthenticationError(
+            "Predict.fun mainnet reads require an API key.",
+            venue="predict_fun",
+            status_code=401,
+            hint="Set PREDICTFUN_API_KEY",
+        )
+    except PermissionError as exc:
+        assert isinstance(exc, AuthenticationError)
+        assert exc.venue == "predict_fun"
+        assert exc.status_code == 401
+        assert exc.hint == "Set PREDICTFUN_API_KEY"
+    else:
+        raise AssertionError("except PermissionError did not catch AuthenticationError")
+
+
 @pytest.mark.asyncio
 async def test_mainnet_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """A missing mainnet key fails before any HTTP request and does not leak a value."""
