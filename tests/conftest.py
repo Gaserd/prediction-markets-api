@@ -1,17 +1,25 @@
 """Pytest configuration and fixtures."""
 
+import importlib.util
 import json
-import sys
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-_SCRIPTS = str(Path(__file__).resolve().parents[1] / "scripts")
-if _SCRIPTS not in sys.path:
-    sys.path.insert(0, _SCRIPTS)
 
-from nightly_smoke import kalshi_smoke_api_base  # noqa: E402
+def _kalshi_smoke_api_base() -> str | None:
+    """Load the demo-host guard. Only called for tests marked live."""
+    path = Path(__file__).resolve().parent / "_smoke_guard.py"
+    spec = importlib.util.spec_from_file_location("smoke_guard", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    base = module.kalshi_smoke_api_base()
+    if base is not None and not isinstance(base, str):
+        raise RuntimeError("Kalshi smoke guard returned a non-string base")
+    return base
 
 
 @pytest.fixture
@@ -66,7 +74,7 @@ def _kalshi_demo_base_for_live_tests(request: pytest.FixtureRequest) -> Iterator
     if request.node.get_closest_marker("live") is None:
         yield
         return
-    base = kalshi_smoke_api_base()
+    base = _kalshi_smoke_api_base()
     if base is None:
         yield
         return
