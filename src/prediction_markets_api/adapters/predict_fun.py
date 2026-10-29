@@ -1,6 +1,8 @@
 """Read-only Predict.fun adapter (BNB Chain).
 
-Docs: https://dev.predict.fun/ (OpenAPI). Terms: https://docs.predict.fun/terms-of-service
+Docs: https://dev.predict.fun/ and the live OpenAPI at
+https://api.predict.fun/docs. Terms: https://docs.predict.fun/terms-of-service.
+Mainnet keys are issued at https://developers.predict.fun.
 
 Hosts:
 
@@ -13,15 +15,21 @@ Hosts:
 
 Endpoints used:
 
-- ``GET /v1/markets`` — cursor page (``first``, ``after``). ``first`` above 100
-  is capped by the API at 100. ``status`` is ``OPEN`` or ``RESOLVED``.
+- ``GET /v1/markets`` — cursor page (``first``, ``after``). The server default
+  for ``first`` is 20. Values above 100 are silently clamped to 100. The docs
+  do not publish a maximum. This client sends at most 100. ``status`` is
+  ``OPEN`` or ``RESOLVED``.
 - ``GET /v1/markets/{id}`` — one market.
 - ``GET /v1/markets/{id}/orderbook`` — bids and asks for outcome ``indexSet`` 1.
-  Levels are ``[price, size]``. Prices are probabilities in ``[0, 1]``.
+  The endpoint has no ``indexSet`` parameter. Levels are ``[price, size]``.
+  Prices are probabilities in ``[0, 1]``. Outcome names are arbitrary.
 - ``GET /v1/orders/matches`` — public match events for ``marketId``, newest
-  first, cursor page (``first``, ``after``). This is the trades read. It does
-  not require a JWT. An unknown market is an empty page, not a 404; this
-  client then calls ``get_market`` and raises ``NotFoundError`` when that 404s.
+  first, cursor page (``first``, ``after``). The server default for ``first``
+  is 50 and values above 150 are clamped to 150. This client sends 100. This
+  is the trades read. It does not require a JWT. An unknown market is an empty
+  page, not a 404; this client then calls ``get_market`` and raises
+  ``NotFoundError`` when that 404s. A full outcome id is checked with
+  ``get_market`` before this request.
 
 ``decimalPrecision`` is the number of price decimal places. The tick is
 ``10 ** -decimalPrecision`` (2 → ``0.01``, 3 → ``0.001`` on testnet). The book
@@ -38,8 +46,10 @@ get a probability or a share count. Book sizes are already share counts.
 registry maps a top-level raw field and this one is nested.
 
 ``Outcome.price`` is the mid of ``bestBid`` and ``bestAsk`` when both exist.
-A one-sided or empty book is ``price=None`` (same rule as Pascal). A resolved
-market uses ``1`` for the winning outcome and ``0`` for the others.
+Those two fields on ``outcomes[]`` are deprecated by the venue and are still
+the only prices on the market payload. A one-sided or empty book is
+``price=None`` (same rule as Pascal). A resolved market uses ``1`` for the
+winning outcome and ``0`` for the others.
 
 The order book is denominated in ``indexSet`` 1. ``indexSet`` 2 is the
 complement (``1 - price``, sides swapped), including when the names are not
@@ -47,11 +57,11 @@ Yes and No. Outcome ids are ``{market_id}:{index_set}:{on_chain_id}``.
 ``get_order_book`` / ``get_trades`` also accept the bare market id, which
 addresses the indexSet-1 book and every match on that market.
 
-Rate limit: 240 requests per minute. The docs state that for a mainnet API
-key. Testnet sends ``ratelimit-limit: 240`` and
-``ratelimit-policy: "rpm";q=240;w=60`` without a key (observed 2026-10-29).
-HTTP 429 maps to ``RateLimitError``. ``Retry-After`` wins, then
-``ratelimit-reset`` (seconds).
+Rate limits are per API key. ``/v1/markets`` and ``/v1/markets/{id}`` allow
+240 requests per minute. ``/v1/markets/{id}/orderbook``, ``/quote``, and
+``/v1/orders/matches`` share a separate bucket of 500 requests per minute
+(testnet ``ratelimit-policy`` headers, observed 2026-10-29). HTTP 429 maps to
+``RateLimitError``. ``Retry-After`` wins, then ``ratelimit-reset`` (seconds).
 
 Trading, websockets, and account reads are not implemented. ``place_order``
 validates a dry-run and does not submit.
@@ -91,6 +101,9 @@ from prediction_markets_api.utils import parse_timestamp
 logger = logging.getLogger(__name__)
 
 _PAGE_MAX = 100
+# A new order cannot be placed in these trading states, so they are CLOSED.
+_CLOSED_TRADING = frozenset({"CLOSED", "PAUSED", "CANCEL_ONLY", "MATCHING_NOT_ENABLED"})
+_CLOSED_LIFECYCLE = frozenset({"REMOVED", "PAUSED"})
 _WEI = Decimal(10) ** 18
 _MAINNET_HOST = "api.predict.fun"
 _VENUE = "predict_fun"
@@ -191,6 +204,8 @@ def _outcome_quote(
         if raw.get("status") == "LOST":
             return Decimal("0"), "0"
         return None, None
+    # outcomes[].bestBid and bestAsk are deprecated. The market payload still
+    # has no other price. A missing field leaves this outcome at price=None.
     bid, _bid_size = _level_price(raw.get("bestBid"))
     ask, _ask_size = _level_price(raw.get("bestAsk"))
     if bid is None or ask is None:
@@ -227,6 +242,15 @@ def _winning_name(raw: dict[str, Any]) -> str | None:
 
 
 def _status(raw: dict[str, Any]) -> tuple[MarketStatus, bool, str]:
+    """Map venue status onto the shared enum.
+
+    ``OPEN`` means a new order can be placed. Lifecycle ``PAUSED`` and
+    ``REMOVED``, and ``tradingStatus`` ``PAUSED``, ``CANCEL_ONLY``,
+    ``MATCHING_NOT_ENABLED``, and ``CLOSED``, are ``CLOSED``.
+    ``PRICE_PROPOSED`` and ``PRICE_DISPUTED`` stay ``OPEN`` when
+    ``tradingStatus`` is ``OPEN``. ``venue_status`` keeps the raw lifecycle
+    ``status`` when the venue sent one. Both fields stay on ``raw_data``.
+    """
     lifecycle = raw.get("status")
     trading = raw.get("tradingStatus")
     if isinstance(lifecycle, str) and lifecycle:
@@ -237,7 +261,7 @@ def _status(raw: dict[str, Any]) -> tuple[MarketStatus, bool, str]:
         venue_status = "unknown"
     if lifecycle == "RESOLVED":
         return MarketStatus.RESOLVED, True, venue_status
-    if lifecycle == "REMOVED" or trading == "CLOSED":
+    if lifecycle in _CLOSED_LIFECYCLE or trading in _CLOSED_TRADING:
         return MarketStatus.CLOSED, False, venue_status
     return MarketStatus.OPEN, False, venue_status
 
@@ -491,10 +515,15 @@ class PredictFunClient(BaseClient):
     ) -> AsyncIterator[Market]:
         """List markets from ``GET /v1/markets``.
 
-        ``closed=False`` sends ``status=OPEN``. ``closed=True`` sends
+        ``closed=False`` sends ``status=OPEN`` and then drops markets whose
+        normalized status is not ``OPEN``. The venue filter also returns
+        markets where a new order cannot be placed. ``closed=True`` sends
         ``status=RESOLVED``. ``closed=None`` omits ``status``. Pages use
-        ``first`` and ``after``. ``first`` is at most 100 because that is the
-        API cap. ``limit`` stops the iterator before the next page.
+        ``first`` and ``after``. The server default for ``first`` is 20 and
+        values above 100 are silently clamped to 100. This client sends at
+        most 100. ``limit`` stops the iterator before the next page. A 5xx
+        on a later page raises ``VenueAPIError`` with that page number and
+        cursor instead of ending the listing.
 
         ``venue_params``:
 
@@ -518,18 +547,32 @@ class PredictFunClient(BaseClient):
         cursor: str | None = None
         seen_cursors: set[str] = set()
         seen_ids: set[str] = set()
+        page_number = 0
         while True:
             if limit is not None and yielded >= limit:
                 return
             remaining = None if limit is None else limit - yielded
             page = page_size if remaining is None else min(page_size, remaining)
             page = min(page, _PAGE_MAX)
+            page_number += 1
             query = dict(params)
             query["first"] = str(page)
             if cursor is not None:
                 query["after"] = cursor
             url = f"{self._base_url}/v1/markets"
-            body = await self._request("GET", "/v1/markets", params=query)
+            try:
+                body = await self._request("GET", "/v1/markets", params=query)
+            except VenueAPIError as exc:
+                if exc.status_code is not None and exc.status_code >= 500:
+                    shown = cursor if cursor is not None else "none"
+                    raise VenueAPIError(
+                        "Predict.fun list_markets failed on "
+                        f"page {page_number} at cursor {shown}: {exc}",
+                        status_code=exc.status_code,
+                        venue=exc.venue,
+                        url=exc.url,
+                    ) from exc
+                raise
             raw_markets, next_cursor = _data_list(body, url, "markets")
             if next_cursor is not None and next_cursor in seen_cursors:
                 logger.warning(
@@ -597,18 +640,21 @@ class PredictFunClient(BaseClient):
     async def get_order_book(self, outcome_id: str) -> OrderBook:
         """Get ``GET /v1/markets/{id}/orderbook`` for one outcome.
 
-        A bare market id and ``indexSet`` 1 use the book as published (the
-        indexSet-1 outcome). ``indexSet`` 2 inverts it. Any other index has no
-        book on this endpoint. An empty book is returned as-is. A crossed book
-        raises ``ValueError``.
+        The endpoint has no ``indexSet`` parameter. It always returns the
+        indexSet-1 book. A bare market id and ``indexSet`` 1 use that book.
+        ``indexSet`` 2 inverts it (``1 - price``, sides swapped). Outcome names
+        are arbitrary. Any other index has no book on this endpoint. A full
+        outcome id is checked against ``get_market`` before the book request.
+        An empty book is returned as-is. A crossed book raises ``ValueError``.
 
         Raises:
-            NotFoundError: If the market or outcome has no book.
+            NotFoundError: If the market or outcome has no book, or
+                ``onChainId`` is not on the market.
             ValueError: If ``outcome_id`` is malformed or the book is crossed.
             AuthenticationError: If mainnet credentials are missing or rejected.
             VenueAPIError: If the request fails for another reason.
         """
-        market_id, index_set, _on_chain = _parse_outcome_id(outcome_id)
+        market_id, index_set, on_chain = _parse_outcome_id(outcome_id)
         if index_set not in (None, 1, 2):
             raise NotFoundError(
                 f"Order book is only published for indexSet 1 and its complement "
@@ -616,6 +662,8 @@ class PredictFunClient(BaseClient):
                 resource_type="outcome",
                 resource_id=outcome_id,
             )
+        if on_chain is not None:
+            await self._require_known_outcome(outcome_id)
         path = f"/v1/markets/{quote(market_id, safe='')}/orderbook"
         url = f"{self._base_url}{path}"
         try:
@@ -668,13 +716,16 @@ class PredictFunClient(BaseClient):
         """Yield up to ``limit`` public matches for one market or outcome.
 
         ``GET /v1/orders/matches`` is filtered by ``marketId``. A full outcome
-        id also drops prints whose ``taker.outcome.onChainId`` does not match.
+        id is checked with ``get_market`` before that request. Unknown
+        ``onChainId`` values raise ``NotFoundError`` and no match page is
+        fetched. Matching prints are then filtered on the client, so each page
+        requests ``first=100`` (the endpoint defaults to 50 and clamps to 150).
         Prices and sizes are converted from 18-decimal wei. ``quoteType``
         ``Bid`` is ``BUY`` and ``Ask`` is ``SELL``.
 
         Raises:
             ValueError: If ``limit`` is not positive or ``outcome_id`` is malformed.
-            NotFoundError: If the market does not exist.
+            NotFoundError: If the market or outcome does not exist.
             AuthenticationError: If mainnet credentials are missing or rejected.
             VenueAPIError: If the request fails for another reason.
         """
@@ -804,8 +855,28 @@ class PredictFunClient(BaseClient):
             )
             return None
 
+    async def _require_known_outcome(self, outcome_id: str) -> None:
+        """Raise ``NotFoundError`` when a full outcome id is not on the market.
+
+        Called before an order book or match request. A bare market id is not
+        checked here.
+        """
+        market_id, _index_set, on_chain = _parse_outcome_id(outcome_id)
+        if on_chain is None:
+            return
+        market = await self.get_market(market_id)
+        if any(outcome.id == outcome_id for outcome in market.outcomes):
+            return
+        raise NotFoundError(
+            f"Outcome not found: {outcome_id}",
+            resource_type="outcome",
+            resource_id=outcome_id,
+        )
+
     async def _iter_trades(self, outcome_id: str, limit: int | None) -> AsyncIterator[Trade]:
         market_id, _index_set, on_chain = _parse_outcome_id(outcome_id)
+        if on_chain is not None:
+            await self._require_known_outcome(outcome_id)
         cursor: str | None = None
         seen_cursors: set[str] = set()
         yielded = 0
@@ -813,7 +884,12 @@ class PredictFunClient(BaseClient):
         while True:
             if limit is not None and yielded >= limit:
                 return
-            page = _PAGE_MAX if limit is None else min(_PAGE_MAX, limit - yielded)
+            # Outcome filtering is client-side, so a filtered read always asks
+            # for a full page instead of shrinking `first` to the remaining limit.
+            if on_chain is not None or limit is None:
+                page = _PAGE_MAX
+            else:
+                page = min(_PAGE_MAX, limit - yielded)
             params: dict[str, str] = {"marketId": market_id, "first": str(page)}
             if cursor is not None:
                 params["after"] = cursor

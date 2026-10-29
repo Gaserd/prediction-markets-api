@@ -1,7 +1,8 @@
-"""Live smoke tests for Predict.fun mainnet (opt-in with -m live).
+"""Live smoke tests for Predict.fun (opt-in with -m live).
 
-Mainnet reads require ``PREDICTFUN_API_KEY``. These tests skip when it is unset.
-They do not print the key.
+Mainnet reads require ``PREDICTFUN_API_KEY``. Those tests skip when it is unset.
+Testnet reads use ``https://api-testnet.predict.fun`` and do not need a key.
+Neither test prints a key. Normal CI deselects this module with ``-m "not live"``.
 """
 
 import os
@@ -61,3 +62,21 @@ async def test_order_book_price_and_trades_live() -> None:
         for trade in trades:
             assert Decimal("0") <= trade.price <= Decimal("1")
             assert trade.timestamp.tzinfo is not None
+
+
+@pytest.mark.live
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio
+async def test_testnet_list_book_and_trades_live() -> None:
+    """Read a short testnet listing, one book, and a few matches. No API key."""
+    async with PredictFunClient(base_url=PredictFunClient.TESTNET_API_BASE) as client:
+        markets = [market async for market in client.list_markets(closed=False, limit=3)]
+        assert markets
+        assert len(markets) <= 3
+        market = markets[0]
+        fetched = await client.get_market(market.id)
+        assert fetched.id == market.id
+        book = await client.get_order_book(market.id)
+        assert book.market_id == market.id
+        trades = [trade async for trade in client.get_trades(market.id, limit=5)]
+        assert len(trades) <= 5

@@ -124,6 +124,9 @@ async def test_order_book_complement_and_price(monkeypatch: pytest.MonkeyPatch) 
     complement_id = f"437:{complement['indexSet']}:{complement['onChainId']}"
     async with _client(monkeypatch, key="test-key") as client:
         with respx.mock:
+            respx.get(f"{PredictFunClient.API_BASE}/v1/markets/437").mock(
+                return_value=httpx.Response(200, json=_load("market_response"))
+            )
             respx.get(f"{PredictFunClient.API_BASE}/v1/markets/437/orderbook").mock(
                 return_value=httpx.Response(200, json=book_payload)
             )
@@ -163,6 +166,9 @@ async def test_one_sided_order_book_liquidity(monkeypatch: pytest.MonkeyPatch) -
     no_id = f"446:{no['indexSet']}:{no['onChainId']}"
     async with _client(monkeypatch, key="test-key") as client:
         with respx.mock:
+            respx.get(f"{PredictFunClient.API_BASE}/v1/markets/446").mock(
+                return_value=httpx.Response(200, json=market)
+            )
             respx.get(f"{PredictFunClient.API_BASE}/v1/markets/446/orderbook").mock(
                 return_value=httpx.Response(200, json=payload)
             )
@@ -224,12 +230,16 @@ async def test_trades_wei_and_outcome_filter(
     assert isinstance(cursor, str)
     async with _client(monkeypatch, key="test-key") as client:
         with respx.mock:
+            respx.get(f"{PredictFunClient.API_BASE}/v1/markets/437").mock(
+                return_value=httpx.Response(200, json=_load("market_response"))
+            )
             route = respx.get(f"{PredictFunClient.API_BASE}/v1/orders/matches").mock(
                 return_value=httpx.Response(200, json=payload)
             )
             trades = [trade async for trade in client.get_trades("437", limit=2)]
             assert route.call_count == 1
             assert route.calls[0].request.url.params.get("after") is None
+            assert route.calls[0].request.url.params["first"] == "2"
             with caplog.at_level(
                 logging.WARNING, logger="prediction_markets_api.adapters.predict_fun"
             ):
@@ -243,6 +253,8 @@ async def test_trades_wei_and_outcome_filter(
         None,
         cursor,
     ]
+    assert route.calls[1].request.url.params["first"] == "100"
+    assert route.calls[2].request.url.params["first"] == "100"
     assert (
         sum(
             "cursor" in record.message and "repeated" in record.message for record in caplog.records
@@ -496,3 +508,159 @@ async def test_place_order_does_not_submit(monkeypatch: pytest.MonkeyPatch) -> N
         assert result["status"] == "not_implemented"
         assert transport.calls == []
         assert SECRET not in json.dumps(result)
+
+
+def _market_body(**overrides: object) -> dict[str, object]:
+    raw: dict[str, object] = {
+        "id": 7,
+        "question": "Status case",
+        "status": "REGISTERED",
+        "tradingStatus": "OPEN",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "outcomes": [{"name": "Yes", "indexSet": 1, "onChainId": "yes-token"}],
+    }
+    raw.update(overrides)
+    return {"success": True, "data": raw}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"status": "REMOVED", "tradingStatus": "OPEN"}, MarketStatus.CLOSED),
+        ({"status": "REGISTERED", "tradingStatus": "CLOSED"}, MarketStatus.CLOSED),
+        ({"status": "REGISTERED", "tradingStatus": "PAUSED"}, MarketStatus.CLOSED),
+        ({"status": "REGISTERED", "tradingStatus": "CANCEL_ONLY"}, MarketStatus.CLOSED),
+        ({"status": "REGISTERED", "tradingStatus": "MATCHING_NOT_ENABLED"}, MarketStatus.CLOSED),
+        ({"status": "PAUSED", "tradingStatus": "OPEN"}, MarketStatus.CLOSED),
+        ({"status": "PRICE_PROPOSED", "tradingStatus": "OPEN"}, MarketStatus.OPEN),
+        ({"status": "PRICE_DISPUTED", "tradingStatus": "OPEN"}, MarketStatus.OPEN),
+    ],
+)
+async def test_status_branches(
+    monkeypatch: pytest.MonkeyPatch,
+    overrides: dict[str, str],
+    expected: MarketStatus,
+) -> None:
+    """CLOSED is every state where a new order cannot be placed."""
+    payload = _market_body(**overrides)
+    async with _client(monkeypatch, key="test-key") as client:
+        with respx.mock:
+            respx.get(f"{PredictFunClient.API_BASE}/v1/markets/7").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            market = await client.get_market("7")
+    assert market.status == expected
+    assert market.resolved is False
+    assert market.venue_status == overrides["status"]
+    assert market.raw_data["status"] == overrides["status"]
+    assert market.raw_data["tradingStatus"] == overrides["tradingStatus"]
+
+
+@pytest.mark.asyncio
+async def test_open_listing_drops_markets_that_cannot_be_traded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The venue status=OPEN filter still returns non-tradable markets."""
+    payload = {
+        "success": True,
+        "cursor": None,
+        "data": [
+            _market_body(id=1)["data"],
+            _market_body(id=2, tradingStatus="CANCEL_ONLY")["data"],
+            _market_body(id=3, status="PAUSED", tradingStatus="OPEN")["data"],
+        ],
+    }
+    async with _client(monkeypatch, key="test-key") as client:
+        with respx.mock:
+            route = respx.get(f"{PredictFunClient.API_BASE}/v1/markets").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            markets = [market async for market in client.list_markets(closed=False, limit=10)]
+    assert route.calls[0].request.url.params["status"] == "OPEN"
+    assert [market.id for market in markets] == ["1"]
+    assert markets[0].status == MarketStatus.OPEN
+
+
+@pytest.mark.asyncio
+async def test_unknown_on_chain_id_is_not_found_before_trades(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A full outcome id is checked against get_market before matches or the book."""
+    async with _client(monkeypatch, key="test-key") as client:
+        with respx.mock:
+            market_route = respx.get(f"{PredictFunClient.API_BASE}/v1/markets/437").mock(
+                return_value=httpx.Response(200, json=_load("market_response"))
+            )
+            book_route = respx.get(f"{PredictFunClient.API_BASE}/v1/markets/437/orderbook").mock(
+                return_value=httpx.Response(200, json=_load("orderbook_response"))
+            )
+            trade_route = respx.get(f"{PredictFunClient.API_BASE}/v1/orders/matches").mock(
+                return_value=httpx.Response(200, json=_load("trades_response"))
+            )
+            with pytest.raises(NotFoundError):
+                await client.get_order_book("437:2:garbage")
+            with pytest.raises(NotFoundError):
+                _ = [trade async for trade in client.get_trades("437:2:garbage", limit=5)]
+    assert market_route.call_count == 2
+    assert book_route.call_count == 0
+    assert trade_route.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_page_size_above_100_sends_first_100(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _load("markets_response")
+    async with _client(monkeypatch, key="test-key") as client:
+        with respx.mock:
+            route = respx.get(f"{PredictFunClient.API_BASE}/v1/markets").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            _ = [market async for market in client.list_markets(page_size=250, limit=150)]
+    assert route.calls[0].request.url.params["first"] == "100"
+
+
+@pytest.mark.asyncio
+async def test_second_page_server_error_names_the_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 5xx mid-listing raises and does not finish as a partial success."""
+    cursor = "cursor-for-id-3882684"
+    first = _market_body(id=11)
+    page = {"success": True, "cursor": cursor, "data": [first["data"]]}
+    async with _client(monkeypatch, key="test-key") as client:
+        with respx.mock:
+            route = respx.get(f"{PredictFunClient.API_BASE}/v1/markets").mock(
+                side_effect=[
+                    httpx.Response(200, json=page),
+                    httpx.Response(500, json={"success": False, "message": "venue failed"}),
+                ]
+            )
+            with pytest.raises(VenueAPIError) as caught:
+                _ = [market async for market in client.list_markets(limit=50)]
+    assert route.call_count == 2
+    message = str(caught.value)
+    assert cursor in message
+    assert "page 2" in message
+    assert caught.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_missing_best_bid_and_ask_leave_price_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deprecated bestBid/bestAsk fields may be absent. That is price=None."""
+    payload = _market_body()
+    data = payload["data"]
+    assert isinstance(data, dict)
+    outcomes = data["outcomes"]
+    assert isinstance(outcomes, list)
+    assert "bestBid" not in outcomes[0]
+    assert "bestAsk" not in outcomes[0]
+    async with _client(monkeypatch, key="test-key") as client:
+        with respx.mock:
+            respx.get(f"{PredictFunClient.API_BASE}/v1/markets/7").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            market = await client.get_market("7")
+    assert market.outcomes[0].price is None
+    assert market.outcomes[0].raw_price is None
