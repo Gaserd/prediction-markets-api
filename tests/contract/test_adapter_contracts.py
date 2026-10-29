@@ -118,11 +118,6 @@ def mock_trades(adapter_name: str, payload: Any) -> Any:
         return respx.get(url__regex=r".*/events.*").mock(return_value=Response(200, json=payload))
     if adapter_name == "predict_fun":
         return respx.get(url__regex=r".*/matches.*").mock(return_value=Response(200, json=payload))
-    if adapter_name == "opinion":
-        # `/openapi/trade` is the user-fills read. It is not matched by `.*/trades.*`.
-        return respx.get(url__regex=r".*/openapi/trade(\?.*)?$").mock(
-            return_value=Response(200, json=payload)
-        )
     return respx.get(url__regex=r".*/trades.*").mock(return_value=Response(200, json=payload))
 
 
@@ -145,10 +140,6 @@ async def adapter_client(adapter_config, monkeypatch: pytest.MonkeyPatch) -> Bas
     # and it is only sent to the mocked transport.
     if adapter_config.name == "predict_fun":
         monkeypatch.setenv("PREDICTFUN_API_KEY", "test-key")
-    # User-trade reads require a key. The value is a placeholder, not a secret,
-    # and it is only sent to the mocked transport. Public reads ignore it.
-    if adapter_config.name == "opinion":
-        monkeypatch.setenv("OPINION_API_KEY", "test-key")
     client = adapter_config.client_class()
     try:
         yield client
@@ -1413,6 +1404,17 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
     - iter_trades() paginates until exhausted (no limit)
     - No page requested after limit is reached
     """
+    # Opinion has no public trade feed. Own fills are trading 1.0.
+    if adapter_config.name == "opinion":
+        with respx.mock as router:
+            with pytest.raises(NotImplementedError, match="public trade feed"):
+                async for _ in adapter_client.get_trades("1", limit=1):
+                    pass
+            with pytest.raises(NotImplementedError, match="public trade feed"):
+                async for _ in adapter_client.iter_trades("1"):
+                    pass
+            assert router.calls.call_count == 0
+        return
 
     # Build 3 pages × 50 synthetic trades each = 150 total
     def build_trade(index: int) -> dict:
@@ -1471,22 +1473,6 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                 "seq": str(1000 + index),
                 "trade_ts_ms": str(1791697593000 + index),
             }
-        elif adapter_config.name == "opinion":
-            # UserTradeData. Prices stay inside 0.50–0.59. status 2 is Filled.
-            cents = 50 + (index % 10)
-            return {
-                "txHash": f"0x{index:064x}",
-                "marketId": 123,
-                "side": "BUY" if index % 2 == 0 else "SELL",
-                "outcome": "Yes",
-                "outcomeSide": 1,
-                "price": f"0.{cents:02d}",
-                "shares": str(10 + index),
-                "amount": "1",
-                "status": 2,
-                "createdAt": 1791697593 + index,
-                "chainId": "56",
-            }
         elif adapter_config.name == "predict_fun":
             # Match events. priceExecuted and amountFilled are 18-decimal wei.
             # Prices stay inside 0.50–0.59.
@@ -1538,9 +1524,6 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                     "server_time_ms": "1791697593000",
                 }
             )
-    elif adapter_config.name == "opinion":
-        # Flat list. The route slices it with the requested page and limit (max 20).
-        pages.append([build_trade(i) for i in range(150)])
     elif adapter_config.name == "predict_fun":
         # Three cursor pages, same shape as GET /v1/orders/matches.
         for page_num in range(1, 4):
@@ -1603,20 +1586,6 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
             route = respx.get(url__regex=r".*/trades.*").mock(side_effect=get_next_page)
         elif adapter_config.name == "predict_fun":
             route = respx.get(url__regex=r".*/matches.*").mock(side_effect=get_next_page)
-        elif adapter_config.name == "opinion":
-            flat_trades = pages[0]
-
-            def opinion_page(request):
-                page = int(request.url.params.get("page", "1"))
-                page_limit = int(request.url.params.get("limit", "20"))
-                start = (page - 1) * page_limit
-                chunk = flat_trades[start : start + page_limit]
-                return Response(
-                    200,
-                    json={"errno": 0, "errmsg": "", "result": {"total": 150, "list": chunk}},
-                )
-
-            route = respx.get(url__regex=r".*/openapi/trade(\?.*)?$").mock(side_effect=opinion_page)
 
         # Test with explicit limit=5 (should fetch exactly 5 from first page)
         page_index[0] = 0
@@ -1646,14 +1615,6 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
             assert route.call_count == 1, (
                 f"get_trades(limit=100) made {route.call_count} requests, expected 1 (no pagination)"
             )
-        elif adapter_config.name == "opinion":
-            # Page size is capped at 20, so 100 fills are five pages.
-            assert len(trades_default) == 100, (
-                f"get_trades() without limit returned {len(trades_default)} trades, expected 100"
-            )
-            assert route.call_count == 5, (
-                f"get_trades(limit=100) made {route.call_count} requests, expected 5 (20*5)"
-            )
         else:
             # Polymarket/Kalshi: should fetch exactly 100 from 2 pages (50+50)
             assert len(trades_default) == 100, (
@@ -1676,14 +1637,6 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
             )
             assert route.call_count == 1, (
                 f"iter_trades() made {route.call_count} requests, expected 1 (no pagination)"
-            )
-        elif adapter_config.name == "opinion":
-            # 150 fills at 20 per page: seven full pages and one short page of 10.
-            assert len(all_trades) == 150, (
-                f"iter_trades() returned {len(all_trades)} trades, expected 150"
-            )
-            assert route.call_count == 8, (
-                f"iter_trades() made {route.call_count} requests, expected 8 (7*20+10)"
             )
         else:
             assert len(all_trades) == 150, (

@@ -48,6 +48,8 @@ def generate_table() -> str:
         notes = []
         if venue.referral_url:
             notes.append(f"plain link: {venue.url}")
+        if venue_key == "opinion":
+            notes.append("no public trade feed")
         notes_str = " ".join(notes) if notes else ""
 
         lines.append(

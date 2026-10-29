@@ -9,31 +9,33 @@ host (``openapi-testnet.opinion.trade`` does not resolve). The official
 ``opinion-clob-sdk`` 0.7.0 speaks to this host on chain id 56 (BNB mainnet)
 only.
 
-Public reads do not require an API key. When ``OPINION_API_KEY`` is set to a
-non-whitespace value it is sent as the ``apikey`` header and is never logged
-or included in ``repr``. An invalid key is HTTP 401 and raises
-``AuthenticationError`` with no anonymous fallback. ``GET /openapi/trade``
-(the caller's own fills, not a public tape) requires the key and raises
-``AuthenticationError`` before the request when it is unset.
+Public reads do not send an API key. ``OPINION_API_KEY`` is not read and is
+not sent. A key in the environment does not change these reads. HTTP 401 from
+the venue still raises ``AuthenticationError``. There is no public trade
+feed. ``get_trades`` and ``iter_trades`` raise ``NotImplementedError`` before
+any request. Own-trade history is planned for trading 1.0. Price history
+(``/openapi/token/price-history``) is candles, not trades, and is not used
+here.
 
 Endpoints used:
 
 - ``GET /openapi/market`` — page (``page`` starts at 1, ``limit``). The server
   default for ``limit`` is 10. Values above 20 are silently clamped to 20.
-  This client sends at most 20. ``status`` is ``activated`` or ``resolved``.
-  ``marketType`` 0 is binary, 1 is categorical, 2 is all. This client sends 2
-  unless ``venue_params['market_type']`` says otherwise.
+  Every request in one listing sends the same ``limit``,
+  ``min(page_size, 20)``. The caller's ``limit`` truncates the iterator on
+  the client. ``status`` is ``activated`` or ``resolved``. ``marketType`` 0
+  is binary, 1 is categorical, 2 is all. This client sends 2 unless
+  ``venue_params['market_type']`` says otherwise.
 - ``GET /openapi/market/{marketId}`` — one binary market, including a
   categorical child. Unknown ids are HTTP 200 with ``errno`` 10200.
 - ``GET /openapi/market/categorical/{marketId}`` — one categorical parent.
-  ``GET /openapi/market/{parentId}`` returns errno 10200 for those ids.
+  ``GET /openapi/market/{parentId}`` returns errno 10200 for those ids. An
+  unknown parent is errno 0 with ``result.data`` null and raises
+  ``NotFoundError``.
 - ``GET /openapi/token/orderbook?token_id=`` — bids and asks for one token.
   Prices are decimal probabilities in ``[0, 1]``. Sizes are share counts.
-  The NO book is the YES book with ``1 - price`` and the sides swapped.
-- ``GET /openapi/trade`` — the API-key owner's filled trades (``page``,
-  ``limit`` max 20, ``marketId``, ``chainId``). There is no public per-market
-  tape. Price history (``/openapi/token/price-history``) is candles, not
-  trades, and is not used here.
+  This client always requests the YES token. The NO book is derived from
+  that YES book (``1 - price``, sides swapped) and is not fetched separately.
 
 Envelope: ``{errno, errmsg, result}``. ``errno`` 0 is success. Quote token on
 chain 56 is USDT (18 decimals). ``Market.currency`` is ``USD`` for those
@@ -42,16 +44,27 @@ liquidity field. List payloads have no best bid or ask, so ``Outcome.price``
 is ``None`` unless the market (or a categorical child) is resolved.
 
 ``OPEN`` means a new order can be placed right now. Only status ``Activated``
-(2) is ``OPEN``. ``Created`` (1), ``Resolving`` (3), ``Failed`` (5), and
-``Deleted`` (6) are ``CLOSED``. ``Resolved`` (4) is ``RESOLVED``. The raw
-status stays on ``venue_status`` and on ``raw_data``. An unknown code logs one
-warning and leaves ``status`` unset.
+(2) is ``OPEN``, and only while ``cutoffAt`` is unset or still in the future.
+A positive ``cutoffAt`` that is already in the past maps to ``CLOSED`` even
+when the status is ``Activated``. ``0`` and a missing cutoff are unset, not
+past. ``Created`` (1), ``Resolving`` (3), ``Failed`` (5), and ``Deleted`` (6)
+are ``CLOSED``. ``Resolved`` (4) is ``RESOLVED`` and is not overridden by the
+cutoff. The raw status stays on ``venue_status`` and on ``raw_data``. An
+unknown code logs one warning and leaves ``status`` unset.
+
+A categorical parent uses the same rule on both the list payload and
+``GET /openapi/market/categorical/{id}``. Those two payloads can disagree on
+the parent status (list ``Activated``, detail ``Created``). ``Resolved`` on
+the parent stays ``RESOLVED``. Otherwise the parent is ``OPEN`` when at least
+one child is ``Activated`` with a cutoff that is unset or still in the future,
+and the parent's own ``cutoffAt`` is unset or still in the future. Every
+other parent is ``CLOSED``. ``venue_status`` stays the raw parent status.
 
 Outcome names are the venue labels (team names, ``YES`` / ``NO``, or anything
 else). Outcome ids are ``{marketId}:{tokenId}``. A bare market id addresses
 the YES-token book of a binary market. A categorical parent has no single
-book. A full outcome id is checked with ``get_market`` before the book or
-trade request.
+book. A full outcome id is checked with ``get_market`` before the book
+request.
 
 Anonymous rate limit observed 2026-10-29: ``ratelimit-limit: 5`` and
 ``ratelimit-reset: 1`` (5 requests per second per IP). The docs also describe
@@ -63,7 +76,6 @@ dry-run and does not submit.
 """
 
 import logging
-import os
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -96,11 +108,11 @@ from prediction_markets_api.utils import parse_timestamp
 logger = logging.getLogger(__name__)
 
 _PAGE_MAX = 20
-_CHAIN_ID = "56"
 _VENUE = "opinion"
-_API_KEY_HEADER = "apikey"
-_API_KEY_ENV = "OPINION_API_KEY"
 _NOT_FOUND_ERRNO = 10200
+_NO_PUBLIC_TRADES = (
+    "Opinion does not publish a public trade feed. Own-trade history is planned for trading 1.0."
+)
 _PARAM_KEYS = frozenset({"market_type", "sort_by", "chain_id", "collection_type"})
 _STATUS_BY_CODE: dict[int, tuple[MarketStatus, bool]] = {
     1: (MarketStatus.CLOSED, False),  # Created
@@ -202,6 +214,60 @@ def _status(raw: dict[str, Any]) -> tuple[MarketStatus | None, bool, str]:
     return status, resolved, venue_status
 
 
+def _cutoff_in_past(value: Any) -> bool:
+    """True when ``cutoffAt`` is a positive unix time already before now.
+
+    ``0`` and a missing value are unset, not in the past.
+    """
+    moment = _unix(value)
+    if moment is None:
+        return False
+    return moment < datetime.now(timezone.utc)
+
+
+def _apply_open_cutoff(
+    raw: dict[str, Any], status: MarketStatus | None, resolved: bool
+) -> tuple[MarketStatus | None, bool]:
+    """Map an otherwise-open market to ``CLOSED`` once ``cutoffAt`` has passed.
+
+    ``RESOLVED`` and every non-open status stay as ``_status`` mapped them.
+    ``venue_status`` is left as the raw status, typically ``Activated``.
+    """
+    if status == MarketStatus.OPEN and _cutoff_in_past(raw.get("cutoffAt")):
+        return MarketStatus.CLOSED, False
+    return status, resolved
+
+
+def _child_tradable(child: dict[str, Any]) -> bool:
+    """A child can still take an order when it is ``Activated`` and not past cutoff."""
+    status, _resolved, _venue_status = _status(child)
+    if status != MarketStatus.OPEN:
+        return False
+    return not _cutoff_in_past(child.get("cutoffAt"))
+
+
+def _categorical_flags(raw: dict[str, Any]) -> tuple[MarketStatus | None, bool, str]:
+    """Parent status shared by the list row and the categorical detail.
+
+    ``Resolved`` stays ``RESOLVED`` so a resolved parent still satisfies the
+    resolved invariant and ``closed=True``. Otherwise the parent is ``OPEN``
+    when at least one child is tradable and the parent's own ``cutoffAt`` is
+    unset or still in the future. ``venue_status`` is the raw parent status.
+    List ``Activated`` and detail ``Created`` can differ; the normalized
+    status does not.
+    """
+    status, resolved, venue_status = _status(raw)
+    if status == MarketStatus.RESOLVED:
+        return status, resolved, venue_status
+    children = raw.get("childMarkets")
+    tradable = False
+    if isinstance(children, list):
+        tradable = any(isinstance(child, dict) and _child_tradable(child) for child in children)
+    if tradable and not _cutoff_in_past(raw.get("cutoffAt")):
+        return MarketStatus.OPEN, False, venue_status
+    return MarketStatus.CLOSED, False, venue_status
+
+
 def _resolved_price(
     token_id: str, result_token_id: str, resolved: bool
 ) -> tuple[Decimal | None, str | None]:
@@ -287,10 +353,12 @@ def _parse_market(raw: dict[str, Any]) -> Market:
     if market_id_raw is None or market_id_raw == "":
         raise ValueError("market id missing")
     market_id = str(market_id_raw)
-    status, resolved, venue_status = _status(raw)
     if _is_categorical(raw):
+        status, resolved, venue_status = _categorical_flags(raw)
         outcomes = _categorical_outcomes(market_id, raw)
     else:
+        status, resolved, venue_status = _status(raw)
+        status, resolved = _apply_open_cutoff(raw, status, resolved)
         outcomes = _binary_outcomes(market_id, raw, resolved)
     created = _unix(raw.get("createdAt"))
     partial = created is None
@@ -364,6 +432,8 @@ def _levels(raw: object, *, invert: bool) -> list[OrderLevel]:
         if price is None or size is None or size <= 0:
             continue
         if invert:
+            # The NO book is derived. raw_price is the computed probability,
+            # not the venue string from the YES level.
             price = Decimal("1") - price
             raw_price: Any = str(price)
         else:
@@ -456,6 +526,13 @@ def _market_dict(body: object, url: str) -> dict[str, Any]:
         raise VenueAPIError("Invalid Opinion market payload", venue=_VENUE, url=url)
     result = body.get("result")
     if isinstance(result, dict):
+        # Unknown categorical ids are errno 0 with result.data null.
+        if "data" in result and result.get("data") is None:
+            raise NotFoundError(
+                "Market not found",
+                resource_type="market",
+                resource_id=None,
+            )
         data = result.get("data")
         if isinstance(data, dict) and "marketId" in data:
             return data
@@ -473,62 +550,12 @@ def _book_dict(body: object, url: str) -> dict[str, Any]:
     raise VenueAPIError("Invalid Opinion order book payload", venue=_VENUE, url=url)
 
 
-def _filled(item: dict[str, Any]) -> bool:
-    if "status" not in item:
-        return True
-    status = item.get("status")
-    if status in (2, "2"):
-        return True
-    if isinstance(status, str) and status.strip().lower() == "filled":
-        return True
-    return False
-
-
-def _trade_side(value: object) -> OrderSide | None:
-    if not isinstance(value, str):
-        return None
-    text = value.strip().upper()
-    if text == "BUY":
-        return OrderSide.BUY
-    if text == "SELL":
-        return OrderSide.SELL
-    return None
-
-
-def _parse_trade(outcome_id: str, market_id: str, item: dict[str, Any]) -> Trade:
-    trade_id = item.get("txHash")
-    if not isinstance(trade_id, str) or not trade_id:
-        raise ValueError("trade id missing")
-    side = _trade_side(item.get("side"))
-    if side is None:
-        raise ValueError("trade side missing")
-    price = _in_unit_interval(_decimal(item.get("price")))
-    size = _decimal(item.get("shares"))
-    if price is None or size is None or size <= 0:
-        raise ValueError("trade price or size missing")
-    timestamp = _unix(item.get("createdAt"))
-    if timestamp is None:
-        raise ValueError("trade timestamp missing")
-    trade_market = item.get("marketId")
-    return Trade(
-        id=trade_id,
-        market_id=str(trade_market) if trade_market not in (None, "") else market_id,
-        outcome_id=outcome_id,
-        side=side,
-        price=price,
-        size=size,
-        timestamp=timestamp,
-        currency=Currency.USD,
-        raw_data=item,
-    )
-
-
 class OpinionClient(BaseClient):
     """Read-only Opinion client.
 
-    Public market, order book, and price reads do not need an API key.
-    ``GET /openapi/trade`` is the caller's own fills and requires
-    ``OPINION_API_KEY``. ``place_order`` is a dry-run stub and does not submit.
+    Public market, order book, and price reads do not send an API key.
+    There is no public trade feed. ``place_order`` is a dry-run stub and
+    does not submit.
     """
 
     API_BASE = "https://openapi.opinion.trade/openapi"
@@ -551,13 +578,9 @@ class OpinionClient(BaseClient):
         self._timeout = timeout
         self._base_url = (base_url or self.API_BASE).rstrip("/")
         self._http_client = httpx.AsyncClient(timeout=timeout)
-        raw_key = os.getenv(_API_KEY_ENV)
-        # Whitespace-only is treated as unset. The value is never logged.
-        self._api_key = raw_key.strip() if isinstance(raw_key, str) and raw_key.strip() else None
 
     def __repr__(self) -> str:
-        masked = "***" if self._api_key else None
-        return f"OpinionClient(base_url={self._base_url!r}, api_key={masked!r})"
+        return f"OpinionClient(base_url={self._base_url!r})"
 
     async def list_markets(
         self,
@@ -571,10 +594,11 @@ class OpinionClient(BaseClient):
         ``closed=False`` sends ``status=activated`` and then drops markets
         whose normalized status is not ``OPEN``. ``closed=True`` sends
         ``status=resolved``. ``closed=None`` omits ``status``. Pages use
-        ``page`` (starting at 1) and ``limit``. The server default for
-        ``limit`` is 10 and values above 20 are silently clamped to 20. This
-        client sends at most 20. ``limit`` stops the iterator before the next
-        page. A 5xx on a later page raises ``VenueAPIError`` with that page
+        ``page`` (starting at 1) and a fixed ``limit`` of
+        ``min(page_size, 20)``. The server default for ``limit`` is 10 and
+        values above 20 are silently clamped to 20, so a shrinking page size
+        would re-read earlier rows. The caller's ``limit`` truncates after
+        parse. A 5xx on a later page raises ``VenueAPIError`` with that page
         number and cursor instead of ending the listing. There is no cursor
         token; the cursor text is the page number.
 
@@ -583,14 +607,17 @@ class OpinionClient(BaseClient):
         - ``market_type``: ``0`` binary, ``1`` categorical, ``2`` all. Sent as
           ``marketType``. The default is ``2``.
         - ``sort_by``: ``0`` through ``8``, sent as ``sortBy`` only when set.
+          The Market OpenAPI enum lists ``1`` through ``8``. The server also
+          accepts ``0`` (``opinion_api`` ``NoSort``).
         - ``chain_id``: sent as ``chainId`` only when set.
         - ``collection_type``: ``0``, ``1``, or ``2``, sent as ``collectionType``
-          only when set.
+          only when set. This field is not in the Market OpenAPI. Live accepts
+          ``0``, ``1``, and ``2``, and the reported total changes.
 
         Raises:
             ValueError: If ``limit`` or ``page_size`` is not positive, or
                 ``venue_params`` has an unsupported key.
-            AuthenticationError: If a configured key is rejected.
+            AuthenticationError: If the venue rejects the request with HTTP 401.
             RateLimitError: If the venue returns HTTP 429.
             VenueAPIError: If a read request fails for another reason.
         """
@@ -598,19 +625,19 @@ class OpinionClient(BaseClient):
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
         params = self._list_params(closed, venue_params)
+        # Fixed server page size. Shrinking `limit` to the remainder keeps the
+        # page number and re-reads rows the previous pages already returned.
+        page_limit = min(page_size, _PAGE_MAX)
         yielded = 0
         seen_ids: set[str] = set()
         page_number = 0
         while True:
             if limit is not None and yielded >= limit:
                 return
-            remaining = None if limit is None else limit - yielded
-            page = page_size if remaining is None else min(page_size, remaining)
-            page = min(page, _PAGE_MAX)
             page_number += 1
             query = dict(params)
             query["page"] = str(page_number)
-            query["limit"] = str(page)
+            query["limit"] = str(page_limit)
             url = f"{self._base_url}/market"
             try:
                 body = await self._request("GET", "/market", params=query)
@@ -650,7 +677,7 @@ class OpinionClient(BaseClient):
                 return
             if limit is not None and yielded >= limit:
                 return
-            if len(raw_markets) < page:
+            if len(raw_markets) < page_limit:
                 return
 
     async def get_market(self, market_id: str) -> Market:
@@ -661,9 +688,10 @@ class OpinionClient(BaseClient):
         then calls ``GET /openapi/market/categorical/{id}``.
 
         Raises:
-            NotFoundError: If the id is empty or the venue reports errno 10200
-                on both paths.
-            AuthenticationError: If a configured key is rejected.
+            NotFoundError: If the id is empty, the venue reports errno 10200
+                on both paths, or the categorical payload has ``result.data``
+                null.
+            AuthenticationError: If the venue rejects the request with HTTP 401.
             VenueAPIError: If the request fails for another reason.
         """
         if not market_id:
@@ -684,18 +712,20 @@ class OpinionClient(BaseClient):
     async def get_order_book(self, outcome_id: str) -> OrderBook:
         """Get the order book for one outcome.
 
-        ``GET /openapi/token/orderbook`` is per token. This client requests the
-        YES token. A NO token uses that book with ``1 - price`` and the sides
-        swapped, which matches the published NO book. Outcome names are
-        arbitrary. A bare market id addresses the YES book of a binary market.
-        A categorical parent has no single book. A full outcome id is checked
+        ``GET /openapi/token/orderbook`` is per token. This client always
+        requests the YES token. The NO book is derived from that YES book
+        (``1 - price``, sides swapped) and is not fetched separately.
+        ``raw_price`` on an inverted level is the computed probability string,
+        not the venue string from the YES level. Outcome names are arbitrary.
+        A bare market id addresses the YES book of a binary market. A
+        categorical parent has no single book. A full outcome id is checked
         against ``get_market`` before the book request. An empty book is
         returned as-is. A crossed book raises ``ValueError``.
 
         Raises:
             NotFoundError: If the market or outcome has no book.
             ValueError: If ``outcome_id`` is malformed or the book is crossed.
-            AuthenticationError: If a configured key is rejected.
+            AuthenticationError: If the venue rejects the request with HTTP 401.
             VenueAPIError: If the request fails for another reason.
         """
         market_id, token_id = _parse_outcome_id(outcome_id)
@@ -771,35 +801,29 @@ class OpinionClient(BaseClient):
         outcome_id: str,
         limit: int = 100,
     ) -> AsyncIterator[Trade]:
-        """Yield up to ``limit`` of the API-key owner's fills for one market.
+        """Opinion does not publish a public trade feed.
 
-        ``GET /openapi/trade`` is the caller's trade history, not a public
-        tape. No public per-market trade history is published. A full outcome
-        id is checked with ``get_market`` before that request. Unknown token
-        ids raise ``NotFoundError`` and no trade page is fetched. Fills are
-        then filtered on the client (``outcomeSide`` 1 is the YES token and 2
-        is the NO token). Each page requests at most 20, which is the server
-        maximum. Only filled rows (status 2) are yielded. ``OPINION_API_KEY``
-        is required before the trade request.
+        This method does not call the venue and does not read an API key.
+        Own-trade history is planned for trading 1.0.
 
         Raises:
-            ValueError: If ``limit`` is not positive or ``outcome_id`` is malformed.
-            NotFoundError: If the market or outcome does not exist.
-            AuthenticationError: If ``OPINION_API_KEY`` is unset or rejected.
-            VenueAPIError: If the request fails for another reason.
+            ValueError: If ``limit`` is not positive.
+            NotImplementedError: Always. There is no public trade feed.
         """
+        del outcome_id
         validate_limit(limit)
-        async for trade in self._iter_trades(outcome_id, limit):
-            yield trade
+        raise NotImplementedError(_NO_PUBLIC_TRADES)
+        yield  # pragma: no cover
 
     async def iter_trades(self, outcome_id: str) -> AsyncIterator[Trade]:
-        """Yield every fill the trade endpoint will page through.
+        """Opinion does not publish a public trade feed.
 
-        A page whose trade ids were all seen already stops the iterator. One
-        warning is logged. The same fills are not requested again.
+        This method does not call the venue. Own-trade history is planned
+        for trading 1.0.
         """
-        async for trade in self._iter_trades(outcome_id, None):
-            yield trade
+        del outcome_id
+        raise NotImplementedError(_NO_PUBLIC_TRADES)
+        yield  # pragma: no cover
 
     async def place_order(
         self,
@@ -814,9 +838,9 @@ class OpinionClient(BaseClient):
 
         Order placement is not implemented. ``dry_run`` defaults to ``True``
         and performs no HTTP request. ``dry_run=False`` still does not submit
-        an order; it requires ``OPINION_API_KEY`` and returns a
-        not-implemented payload. ``kwargs`` is accepted because ``place_order``
-        still matches the base signature, which takes ``**kwargs`` until 1.0.
+        an order and does not read an API key. ``kwargs`` is accepted because
+        ``place_order`` still matches the base signature, which takes
+        ``**kwargs`` until 1.0.
         """
         del kwargs
         if price < Decimal("0") or price > Decimal("1"):
@@ -835,38 +859,15 @@ class OpinionClient(BaseClient):
                 "status": "simulated",
                 "message": "Order validated but not sent (dry_run=True)",
             }
-        if not self._api_key:
-            raise PermissionError(
-                "Trading requires API credentials via environment variable: OPINION_API_KEY"
-            )
-        return {
-            "dry_run": False,
-            "status": "not_implemented",
-            "message": "Order placement not implemented in this version",
-        }
+        raise PermissionError("Order placement is not implemented")
 
     async def close(self) -> None:
         """Close the HTTP client."""
         await self._http_client.aclose()
 
     def _read_headers(self) -> dict[str, str]:
-        """Headers for one read. The key is not logged."""
-        headers = {"Accept": "application/json"}
-        if self._api_key:
-            headers[_API_KEY_HEADER] = self._api_key
-        return headers
-
-    def _require_trade_key(self) -> None:
-        if self._api_key:
-            return
-        raise AuthenticationError(
-            "Opinion trade history requires an API key. "
-            f"Set the {_API_KEY_ENV} environment variable. "
-            f"The key is sent as the {_API_KEY_HEADER} header and is not logged. "
-            "Public market, order book, and price reads do not need a key.",
-            venue=_VENUE,
-            hint=f"Set the {_API_KEY_ENV} environment variable.",
-        )
+        """Headers for one public read. No API key is sent."""
+        return {"Accept": "application/json"}
 
     def _list_params(
         self, closed: bool | None, venue_params: dict[str, Any] | None
@@ -888,6 +889,7 @@ class OpinionClient(BaseClient):
             params["status"] = "resolved"
         if "sort_by" in options:
             sort_by = options["sort_by"]
+            # OpenAPI lists 1..8. The server accepts 0 (opinion_api NoSort).
             if isinstance(sort_by, bool) or not isinstance(sort_by, int) or not 0 <= sort_by <= 8:
                 raise ValueError("venue_params['sort_by'] must be an integer from 0 to 8")
             params["sortBy"] = str(sort_by)
@@ -897,6 +899,8 @@ class OpinionClient(BaseClient):
                 raise ValueError("venue_params['chain_id'] must be a non-empty string")
             params["chainId"] = chain_id.strip()
         if "collection_type" in options:
+            # Not in the Market OpenAPI. Live accepts 0, 1, and 2 and the
+            # reported total changes.
             collection = options["collection_type"]
             if (
                 isinstance(collection, bool)
@@ -922,7 +926,14 @@ class OpinionClient(BaseClient):
             return None
 
     def _require_market(self, body: object, url: str, market_id: str) -> Market:
-        raw = _market_dict(body, url)
+        try:
+            raw = _market_dict(body, url)
+        except NotFoundError as exc:
+            raise NotFoundError(
+                f"Market not found: {market_id}",
+                resource_type="market",
+                resource_id=market_id,
+            ) from exc
         market = self._one_market(raw)
         if market is None or market.id != market_id:
             raise NotFoundError(
@@ -943,88 +954,6 @@ class OpinionClient(BaseClient):
                 resource_id=market_id,
             ) from exc
 
-    async def _iter_trades(self, outcome_id: str, limit: int | None) -> AsyncIterator[Trade]:
-        market_id, token_id = _parse_outcome_id(outcome_id)
-        market: Market | None = None
-        if token_id is not None:
-            market = await self.get_market(market_id)
-            if not any(outcome.id == outcome_id for outcome in market.outcomes):
-                raise NotFoundError(
-                    f"Outcome not found: {outcome_id}",
-                    resource_type="outcome",
-                    resource_id=outcome_id,
-                )
-        self._require_trade_key()
-        expected_side = _expected_outcome_side(market, token_id) if token_id is not None else None
-        if token_id is not None and expected_side is None:
-            raise NotFoundError(
-                f"Outcome not found: {outcome_id}",
-                resource_type="outcome",
-                resource_id=outcome_id,
-            )
-        page_number = 0
-        seen_ids: set[str] = set()
-        yielded = 0
-        first_page = True
-        while True:
-            if limit is not None and yielded >= limit:
-                return
-            # Outcome filtering is client-side, so a filtered read always asks
-            # for a full page instead of shrinking `limit` to the remainder.
-            if token_id is not None or limit is None:
-                page = _PAGE_MAX
-            else:
-                page = min(_PAGE_MAX, limit - yielded)
-            page_number += 1
-            params = {
-                "page": str(page_number),
-                "limit": str(page),
-                "marketId": market_id,
-                "chainId": _CHAIN_ID,
-            }
-            url = f"{self._base_url}/trade"
-            body = await self._request("GET", "/trade", params=params)
-            items = _result_list(body, url, "trades")
-            if not items:
-                if first_page and token_id is None:
-                    await self.get_market(market_id)
-                return
-            first_page = False
-            page_ids = [
-                item.get("txHash")
-                for item in items
-                if isinstance(item.get("txHash"), str) and item.get("txHash")
-            ]
-            if page_ids and all(trade_id in seen_ids for trade_id in page_ids):
-                logger.warning(
-                    "Stopping Opinion trade pagination for %s: page %s repeated",
-                    outcome_id,
-                    page_number,
-                )
-                return
-            for item in items:
-                if limit is not None and yielded >= limit:
-                    return
-                trade_id = item.get("txHash")
-                if isinstance(trade_id, str) and trade_id:
-                    if trade_id in seen_ids:
-                        continue
-                    seen_ids.add(trade_id)
-                if not _filled(item):
-                    continue
-                if expected_side is not None and not _outcome_side_matches(item, expected_side):
-                    continue
-                try:
-                    trade = _parse_trade(outcome_id, market_id, item)
-                except (KeyError, ValueError, TypeError, ArithmeticError):
-                    continue
-                yield trade
-                yielded += 1
-            if limit is not None and yielded >= limit:
-                return
-            if len(items) < page:
-                return
-
     async def _request(
         self,
         method: str,
@@ -1034,8 +963,7 @@ class OpinionClient(BaseClient):
     ) -> object:
         """Send one read request and map failures onto library errors.
 
-        Request headers are not logged. ``OPINION_API_KEY`` is not copied into
-        the error message.
+        No API key is sent. The error text does not include environment values.
         """
         url = f"{self._base_url}{path}"
         headers = self._read_headers()
@@ -1055,7 +983,7 @@ class OpinionClient(BaseClient):
                     _auth_rejected_message(),
                     status_code=response.status_code,
                     venue=_VENUE,
-                    hint=f"Check the {_API_KEY_ENV} environment variable.",
+                    hint="Public reads do not send an API key.",
                 ) from exc
             if response.status_code == 429:
                 raise RateLimitError(
@@ -1076,7 +1004,7 @@ class OpinionClient(BaseClient):
                 _auth_rejected_message(),
                 status_code=response.status_code if response.status_code else 401,
                 venue=_VENUE,
-                hint=f"Check the {_API_KEY_ENV} environment variable.",
+                hint="Public reads do not send an API key.",
             )
         if response.status_code == 404 or errno == _NOT_FOUND_ERRNO:
             raise NotFoundError(
@@ -1104,23 +1032,6 @@ class OpinionClient(BaseClient):
 
 def _auth_rejected_message() -> str:
     return (
-        "Opinion rejected the API key (HTTP 401). "
-        f"Check the {_API_KEY_ENV} environment variable. The key is not logged."
+        "Opinion rejected the request (HTTP 401). "
+        "Public market, order book, and price reads do not send an API key."
     )
-
-
-def _expected_outcome_side(market: Market | None, token_id: str | None) -> int | None:
-    if market is None or token_id is None:
-        return None
-    role = _token_role(market.raw_data, token_id)
-    if role is None:
-        return None
-    _yes, complement = role
-    return 2 if complement else 1
-
-
-def _outcome_side_matches(item: dict[str, Any], expected: int) -> bool:
-    side = item.get("outcomeSide")
-    if isinstance(side, str) and side.isdigit():
-        side = int(side)
-    return side == expected

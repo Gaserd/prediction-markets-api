@@ -2,9 +2,8 @@
 """Record Opinion read fixtures from the live API.
 
 Writes tests/fixtures/opinion/*_2026-10-29.json from real responses.
-Public market and order book reads do not need a key. ``GET /openapi/trade``
-returns HTTP 401 without ``OPINION_API_KEY``. This script never sends or
-writes an API key.
+Public market and order book reads do not need a key. This script never
+sends or writes an API key. There is no public trade feed to record.
 
 Unit tests do not call the network. Re-run this when refreshing fixtures.
 """
@@ -197,56 +196,15 @@ def main() -> None:
     )
     pause()
 
-    trade_url = f"{BASE}/trade?page=1&limit=1&marketId={market_id}&chainId=56"
-    status, _headers, trade = fetch(trade_url)
+    categorical_missing_url = f"{BASE}/market/categorical/999999999"
+    status, _headers, categorical_missing = fetch(categorical_missing_url)
     write(
-        "error_trade_unauthorized",
+        "categorical_not_found",
         status,
-        trade_url,
-        trade,
-        "Live mainnet GET /openapi/trade without an API key (HTTP 401). No key is sent or stored.",
+        categorical_missing_url,
+        categorical_missing,
+        "Live mainnet unknown categorical id (HTTP 200, errno 0, result.data null, no API key)",
     )
-
-    synthetic = {
-        "errno": 0,
-        "errmsg": "",
-        "result": {
-            "total": 1,
-            "list": [
-                {
-                    "txHash": "0x" + "ab" * 32,
-                    "marketId": int(market_id) if market_id.isdigit() else market_id,
-                    "side": "BUY",
-                    "outcome": "YES",
-                    "outcomeSide": 1,
-                    "price": "0.55",
-                    "shares": "10",
-                    "amount": "5.5",
-                    "status": 2,
-                    "createdAt": 1700000000,
-                    "chainId": "56",
-                }
-            ],
-        },
-    }
-    stem = f"trades_response_{DATE}"
-    trade_path = OUT_DIR / f"{stem}.json"
-    trade_path.write_text(json.dumps(synthetic, indent=2) + "\n", encoding="utf-8")
-    trade_meta = {
-        "synthetic": True,
-        "source": (
-            "UserTradeData shape from the Opinion OpenAPI GET /openapi/trade schema. "
-            "Not a live tape: that endpoint is the caller's fills and requires "
-            "OPINION_API_KEY. No key is stored in this file."
-        ),
-        "token_id": market_id,
-        "request": {"url": f"{BASE}/trade", "method": "GET"},
-        "environment": "schema",
-    }
-    trade_path.with_suffix(".meta.json").write_text(
-        json.dumps(trade_meta, indent=2) + "\n", encoding="utf-8"
-    )
-    print(f"wrote {trade_path.name} synthetic")
 
 
 if __name__ == "__main__":

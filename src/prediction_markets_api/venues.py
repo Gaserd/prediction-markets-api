@@ -146,7 +146,9 @@ VENUES: dict[str, VenueInfo] = {
             "Thailand, South Korea, China, Taiwan, Hong Kong, Iran, Syria, Cuba, "
             "North Korea, Crimea, Donetsk, Luhansk (see ToS for the full list)"
         ),
-        api_key_for_read=False,  # Public market, book, and price reads. Trade history needs a key.
+        # Public market, book, and price reads. No public trade feed:
+        # get_trades raises NotImplementedError. Own fills are trading 1.0.
+        api_key_for_read=False,
         api_key_for_trade=True,
         can_read=True,
         can_trade=False,  # Stub only; place_order does not submit
