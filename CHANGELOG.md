@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Trading models `OrderType`, `OrderStatus`, `Order`, and `Position`. Adapters do
+  not return them yet. `Order` and `Position` are frozen. `price`,
+  `avg_fill_price`, `avg_price`, and `current_price` are `Decimal` values in
+  0..1. Timestamps on `Order` must be timezone-aware UTC. Unless `partial` is
+  true, `filled_size + remaining_size` must equal `size`. `Position.size` is
+  zero or positive: a NO holding is its own outcome, not a negative YES size.
+- `AuthenticationError` (`PredictionMarketsError` and the builtin
+  `PermissionError`) for missing credentials and HTTP 401/403, with `venue`,
+  `status_code`, and `hint`. `except PermissionError` still catches it, so no
+  deprecated alias is added. `OrderRejectedError` (`VenueAPIError`) for
+  business-rule rejections, with `venue_code`. Adapters do not raise these yet.
+
 - Read-only **Pascal** adapter (`PascalClient`, Solana, beta) on the public data API
   `https://data.pascal.trade` (no API key). `list_markets` reads `GET /api/v1/markets`
   (one unresolved snapshot; `limit` is local) and `GET /api/v1/markets/resolved`
