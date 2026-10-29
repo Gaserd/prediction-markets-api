@@ -6,12 +6,12 @@ All amounts include explicit currency.
 Partial responses are allowed with a `partial` flag.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class OrderSide(str, Enum):
@@ -290,4 +290,207 @@ class Trade(BaseModel):
     @field_validator("price", "size", mode="before")
     @classmethod
     def coerce_decimal(cls, v: Any) -> Decimal:
+        return Decimal(str(v))
+
+
+class OrderType(str, Enum):
+    """Time in force for an order.
+
+    ``IOC`` is the normalized name for Polymarket and Limitless "FAK"
+    (fill and kill): fill what you can, cancel the rest.
+    """
+
+    GTC = "GTC"  # rests until filled or cancelled
+    GTD = "GTD"  # rests until expires_at
+    IOC = "IOC"  # fill what you can, cancel the rest
+    FOK = "FOK"  # all or nothing
+
+
+class OrderStatus(str, Enum):
+    """Normalized order status across venues."""
+
+    DRY_RUN = "dry_run"
+    OPEN = "open"  # resting, possibly partially filled
+    FILLED = "filled"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    REJECTED = "rejected"
+
+
+class Order(BaseModel):
+    """A trading order, including a dry-run preview that was not sent.
+
+    Frozen: assigning to a field raises ``ValidationError``.
+
+    ``price`` and ``avg_fill_price`` are probabilities in the closed range 0..1.
+    Timestamps are timezone-aware UTC. Unless ``partial`` is true,
+    ``filled_size + remaining_size`` must equal ``size``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str | None = Field(
+        default=None,
+        description="Venue order id. None for a dry run that was not sent.",
+    )
+    client_order_id: str | None = Field(
+        default=None,
+        description="Client-generated id. Stored locally even when the venue ignores it.",
+    )
+    venue: str = Field(description="Venue name (e.g., 'polymarket', 'kalshi', 'limitless')")
+    market_id: str = Field(description="Venue-specific market identifier")
+    outcome_id: str = Field(description="Venue-specific outcome identifier")
+    side: OrderSide = Field(description="Order side (BUY or SELL)")
+    order_type: OrderType = Field(description="Time in force (GTC, GTD, IOC, or FOK)")
+    post_only: bool = Field(description="True if the order must rest and must not take liquidity")
+    price: Decimal = Field(
+        description="Limit price normalized to 0..1 probability",
+        ge=Decimal("0"),
+        le=Decimal("1"),
+    )
+    raw_price: Any | None = Field(
+        default=None,
+        description="Original price from the venue, or the price before venue conversion",
+    )
+    size: Decimal = Field(
+        description="Original order size in outcome contracts/shares",
+        ge=Decimal("0"),
+    )
+    filled_size: Decimal = Field(
+        default=Decimal("0"),
+        description="Size filled so far",
+        ge=Decimal("0"),
+    )
+    remaining_size: Decimal = Field(
+        description="Size still open. With filled_size, equals size unless partial.",
+        ge=Decimal("0"),
+    )
+    avg_fill_price: Decimal | None = Field(
+        default=None,
+        description="Average fill price normalized to 0..1, if the venue reports it",
+        ge=Decimal("0"),
+        le=Decimal("1"),
+    )
+    status: OrderStatus = Field(description="Normalized order status")
+    venue_status: str | None = Field(default=None, description="Raw venue-specific status string")
+    created_at: datetime | None = Field(default=None, description="Order creation timestamp (UTC)")
+    expires_at: datetime | None = Field(
+        default=None, description="Expiry timestamp for GTD orders (UTC)"
+    )
+    builder_code: str | None = Field(
+        default=None,
+        description="Attached builder code. None if disabled or unsupported by the venue.",
+    )
+    fees_paid: Decimal | None = Field(
+        default=None, description="Fees paid, if the venue reports them"
+    )
+    currency: Currency = Field(description="Order currency")
+    raw_request: dict[str, Any] | None = Field(
+        default=None,
+        description="Body that was or would be sent to the venue. Must not contain secrets.",
+    )
+    raw_data: dict[str, Any] = Field(description="Original venue response (preserved)")
+    partial: bool = Field(
+        default=False,
+        description="True if the venue returned incomplete data (fill invariant is not enforced)",
+    )
+
+    @field_validator(
+        "price",
+        "size",
+        "filled_size",
+        "remaining_size",
+        "avg_fill_price",
+        "fees_paid",
+        mode="before",
+    )
+    @classmethod
+    def coerce_decimal(cls, v: Any) -> Decimal | None:
+        if v is None:
+            return None
+        return Decimal(str(v))
+
+    @field_validator("created_at", "expires_at")
+    @classmethod
+    def ensure_utc(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        offset = v.utcoffset()
+        if offset is None or offset != timedelta(0):
+            raise ValueError("Timestamps must be timezone-aware UTC")
+        return v
+
+    @model_validator(mode="after")
+    def validate_fill_invariant(self) -> "Order":
+        """Require filled_size + remaining_size == size unless the payload is partial."""
+        if self.partial:
+            return self
+        if self.filled_size + self.remaining_size != self.size:
+            raise ValueError(
+                "filled_size + remaining_size must equal size when partial is False "
+                f"(filled_size={self.filled_size}, remaining_size={self.remaining_size}, "
+                f"size={self.size})"
+            )
+        return self
+
+
+class Position(BaseModel):
+    """Shares held in one outcome.
+
+    Frozen: assigning to a field raises ``ValidationError``.
+
+    A NO holding is its own outcome with ``size >= 0``, not a negative YES size.
+    ``avg_price`` and ``current_price`` are probabilities in the closed range 0..1
+    when the venue provides them.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str = Field(description="Venue name (e.g., 'polymarket', 'kalshi', 'limitless')")
+    market_id: str = Field(description="Venue-specific market identifier")
+    outcome_id: str = Field(description="Venue-specific outcome identifier")
+    outcome_name: str | None = Field(
+        default=None, description="Outcome name (e.g., 'Yes', 'No'), if known"
+    )
+    size: Decimal = Field(
+        description="Shares held. Always >= 0; a NO holding is its own outcome.",
+        ge=Decimal("0"),
+    )
+    avg_price: Decimal | None = Field(
+        default=None,
+        description="Average cost basis normalized to 0..1, if the venue provides it",
+        ge=Decimal("0"),
+        le=Decimal("1"),
+    )
+    current_price: Decimal | None = Field(
+        default=None,
+        description="Current price normalized to 0..1, if the venue provides it",
+        ge=Decimal("0"),
+        le=Decimal("1"),
+    )
+    realized_pnl: Decimal | None = Field(
+        default=None, description="Realized PnL in currency units, if the venue provides it"
+    )
+    unrealized_pnl: Decimal | None = Field(
+        default=None, description="Unrealized PnL in currency units, if the venue provides it"
+    )
+    currency: Currency = Field(description="Position currency")
+    raw_data: dict[str, Any] = Field(description="Original venue response (preserved)")
+    partial: bool = Field(
+        default=False,
+        description="True if the venue returned incomplete data",
+    )
+
+    @field_validator(
+        "size",
+        "avg_price",
+        "current_price",
+        "realized_pnl",
+        "unrealized_pnl",
+        mode="before",
+    )
+    @classmethod
+    def coerce_decimal(cls, v: Any) -> Decimal | None:
+        if v is None:
+            return None
         return Decimal(str(v))
