@@ -293,6 +293,8 @@ def test_select_command_writes_one_venue(tmp_path: Path, monkeypatch: pytest.Mon
 def test_gate_command_missing_predict_fun_tests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A checkout without the live file skips, even when this repo has the file."""
+    monkeypatch.chdir(tmp_path)
     summary = tmp_path / "summary.md"
     output = tmp_path / "github_output.txt"
     monkeypatch.setenv("VENUE", "predict_fun")
@@ -316,6 +318,26 @@ def test_gate_command_missing_predict_fun_tests(
     assert "skipped: no live tests" in text
     assert "skipped: no key" not in text
     assert "run=false" in output.read_text(encoding="utf-8")
+
+
+def test_gate_command_predict_fun_live_file_without_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The real live file is present. A missing key skips before pytest runs."""
+    assert Path("tests/test_predict_fun_live.py").is_file()
+    summary = tmp_path / "summary.md"
+    output = tmp_path / "github_output.txt"
+    monkeypatch.setenv("VENUE", "predict_fun")
+    monkeypatch.setenv("REQUIRED_SECRETS", "PREDICTFUN_API_KEY")
+    monkeypatch.setenv("DEMO_ONLY", "false")
+    monkeypatch.delenv("PREDICTFUN_API_KEY", raising=False)
+    monkeypatch.delenv("KALSHI_API_BASE", raising=False)
+    assert main(["gate", "--summary", str(summary), "--github-output", str(output)]) == 0
+    text = summary.read_text(encoding="utf-8")
+    assert text.splitlines()[2] == "skipped: no key"
+    assert "skipped: no live tests" not in text
+    assert "run=false" in output.read_text(encoding="utf-8")
+    assert "skipped: no key" in capsys.readouterr().out
 
 
 def test_gate_command_rejects_production_kalshi(
