@@ -1,0 +1,128 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "symbol": "MLB_2026_WS.LAD",
+      "taker_fee_rate": "0.020000",
+      "maker_rebate_share": "0.250000",
+      "tick_size_min": "0.001000",
+      "tick_sig_figs": 3,
+      "display_attributes": {
+        "event_description": "2026 MLB World Series champion",
+        "expected_resolution_time_ms": "1793851200000",
+        "market_description": "Los Angeles Dodgers",
+        "reference": {
+          "kind": "polymarket",
+          "market_slug": "will-the-los-angeles-dodgers-win-the-2026-world-series",
+          "condition_id": "0x749d8eccbc0a99447e71fc5e40a0096842774bef4d5c8838b8adb39af068b3cb",
+          "market_outcome_token_id": "1204155327844132216976037605131756626466220080116229118353112706411786559118",
+          "reverse_outcome_token_id": "65347099416413012038874568960137034756796660297895673058090101511987410403548"
+        },
+        "sort_order": "PRICE",
+        "tags": [
+          "Sports",
+          "MLB"
+        ],
+        "topic": {
+          "id": "2026-mlb-world-series",
+          "description": "2026 MLB World Series"
+        }
+      },
+      "listing_ts_ms": "1783969747284",
+      "rules_url": "https://pascal-prod-market-metadata-355653384618.s3.ap-northeast-1.amazonaws.com/events/MLB_2026_WS/MLB_2026_WS.LAD.md",
+      "stats": {
+        "last_24h": {
+          "mark_price_start": "0.000000",
+          "taker_buy_volume": "0",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "0.000000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "0",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793257080000"
+        },
+        "all_time": {
+          "taker_buy_volume": "5907",
+          "taker_sell_volume": "3861",
+          "taker_buy_volume_notional": "1864.021000",
+          "taker_sell_volume_notional": "1193.491000",
+          "taker_buy_trade_count": "21",
+          "taker_sell_trade_count": "12",
+          "window_end_ts_ms_exclusive": "1790568720000"
+        }
+      },
+      "mark_price": "0.000000",
+      "open_interest": "0",
+      "long_interest": "0",
+      "short_interest": "0",
+      "resolution": {
+        "price": "0.000000",
+        "seq": "10294643227",
+        "market_resolution_ts_ms": "1792132790783"
+      }
+    },
+    {
+      "symbol": "MLB_2026_WS.TB",
+      "taker_fee_rate": "0.020000",
+      "maker_rebate_share": "0.250000",
+      "tick_size_min": "0.001000",
+      "tick_sig_figs": 3,
+      "display_attributes": {
+        "event_description": "2026 MLB World Series champion",
+        "expected_resolution_time_ms": "1793851200000",
+        "market_description": "Tampa Bay Rays",
+        "reference": {
+          "kind": "polymarket",
+          "market_slug": "will-the-tampa-bay-rays-win-the-2026-world-series",
+          "condition_id": "0x4d9567b9fa71a94b6e43ddb62ea6104cbb01926813938d241cce336bd72a8ba5",
+          "market_outcome_token_id": "47619537154464827225570738666275423513741144464229940374555699932743034295206",
+          "reverse_outcome_token_id": "12972183694776856517378634879501709915001116611116827712475548366106177177382"
+        },
+        "sort_order": "PRICE",
+        "tags": [
+          "Sports",
+          "MLB"
+        ],
+        "topic": {
+          "id": "2026-mlb-world-series",
+          "description": "2026 MLB World Series"
+        }
+      },
+      "listing_ts_ms": "1783969750961",
+      "rules_url": "https://pascal-prod-market-metadata-355653384618.s3.ap-northeast-1.amazonaws.com/events/MLB_2026_WS/MLB_2026_WS.TB.md",
+      "stats": {
+        "last_24h": {
+          "mark_price_start": "0.093000",
+          "taker_buy_volume": "200",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "18.700000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "3",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793257080000"
+        },
+        "all_time": {
+          "taker_buy_volume": "419",
+          "taker_sell_volume": "5090",
+          "taker_buy_volume_notional": "72.248000",
+          "taker_sell_volume_notional": "1794.860000",
+          "taker_buy_trade_count": "7",
+          "taker_sell_trade_count": "5",
+          "window_end_ts_ms_exclusive": "1793232840000"
+        }
+      },
+      "mark_price": "0.000000",
+      "open_interest": "0",
+      "long_interest": "0",
+      "short_interest": "0",
+      "resolution": {
+        "price": "0.000000",
+        "seq": "12281860505",
+        "market_resolution_ts_ms": "1793256219295"
+      }
+    }
+  ],
+  "seq": "12282708237",
+  "state_time_ms": "1793257173774",
+  "server_time_ms": "1793257173822"
+}

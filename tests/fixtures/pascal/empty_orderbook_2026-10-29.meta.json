@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-29T06:55:55.136000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/books?symbols=AI_BEST_MATH_26OCT31.MICROSOFT",
+    "method": "GET"
+  },
+  "description": "Empty order book for a listed market. The listing still has mark_price 0.052000.",
+  "token_id": "AI_BEST_MATH_26OCT31.MICROSOFT"
+}

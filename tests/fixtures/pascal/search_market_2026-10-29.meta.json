@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-10-29T06:55:56.672000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/markets/search",
+    "method": "POST",
+    "body": {
+      "symbols": [
+        "ACA_HOUSE_2026.NOTEXT_DEM"
+      ]
+    }
+  },
+  "description": "Exact symbol search for ACA_HOUSE_2026.NOTEXT_DEM.",
+  "token_id": "ACA_HOUSE_2026.NOTEXT_DEM"
+}

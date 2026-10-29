@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-10-29T06:55:15.536000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/markets",
+    "method": "GET"
+  },
+  "description": "Unresolved markets snapshot recorded 2026-10-29. Trimmed from 3470 markets to 4 verbatim objects: two-sided book, empty book, bid only, ask only."
+}

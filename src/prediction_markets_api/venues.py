@@ -142,18 +142,18 @@ VENUES: dict[str, VenueInfo] = {
     ),
     "pascal": VenueInfo(
         name="Pascal",
-        chain=Chain.BASE,
+        chain=Chain.SOLANA,
         geo_restrictions=None,
         api_key_for_read=False,
         api_key_for_trade=True,
-        can_read=False,
-        can_trade=False,
-        status=VenueStatus.PLANNED,
+        can_read=True,
+        can_trade=False,  # Stub only; place_order does not submit
+        status=VenueStatus.IMPLEMENTED,
         signup_link_key="pascal",
-        liquidity_source=None,  # Unknown until implemented
-        url="https://pascal.money",
+        liquidity_source=None,  # Market state has no liquidity field
+        url="https://app.pascal.trade",
         referral_url=None,
-        supports_closed_markets=False,
+        supports_closed_markets=True,  # resolved listing is lookback-limited (4h/24h/3d)
     ),
     # Wave 3
     "sx_bet": VenueInfo(

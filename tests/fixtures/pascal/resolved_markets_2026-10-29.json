@@ -1,0 +1,68 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "symbol": "MLB_2026_WS.TB",
+      "taker_fee_rate": "0.020000",
+      "maker_rebate_share": "0.250000",
+      "tick_size_min": "0.001000",
+      "tick_sig_figs": 3,
+      "display_attributes": {
+        "event_description": "2026 MLB World Series champion",
+        "expected_resolution_time_ms": "1793851200000",
+        "market_description": "Tampa Bay Rays",
+        "reference": {
+          "kind": "polymarket",
+          "market_slug": "will-the-tampa-bay-rays-win-the-2026-world-series",
+          "condition_id": "0x4d9567b9fa71a94b6e43ddb62ea6104cbb01926813938d241cce336bd72a8ba5",
+          "market_outcome_token_id": "47619537154464827225570738666275423513741144464229940374555699932743034295206",
+          "reverse_outcome_token_id": "12972183694776856517378634879501709915001116611116827712475548366106177177382"
+        },
+        "sort_order": "PRICE",
+        "tags": [
+          "Sports",
+          "MLB"
+        ],
+        "topic": {
+          "id": "2026-mlb-world-series",
+          "description": "2026 MLB World Series"
+        }
+      },
+      "listing_ts_ms": "1783969750961",
+      "rules_url": "https://pascal-prod-market-metadata-355653384618.s3.ap-northeast-1.amazonaws.com/events/MLB_2026_WS/MLB_2026_WS.TB.md",
+      "stats": {
+        "last_24h": {
+          "mark_price_start": "0.093000",
+          "taker_buy_volume": "200",
+          "taker_sell_volume": "0",
+          "taker_buy_volume_notional": "18.700000",
+          "taker_sell_volume_notional": "0.000000",
+          "taker_buy_trade_count": "3",
+          "taker_sell_trade_count": "0",
+          "window_end_ts_ms_exclusive": "1793256900000"
+        },
+        "all_time": {
+          "taker_buy_volume": "419",
+          "taker_sell_volume": "5090",
+          "taker_buy_volume_notional": "72.248000",
+          "taker_sell_volume_notional": "1794.860000",
+          "taker_buy_trade_count": "7",
+          "taker_sell_trade_count": "5",
+          "window_end_ts_ms_exclusive": "1793232840000"
+        }
+      },
+      "mark_price": "0.000000",
+      "open_interest": "0",
+      "long_interest": "0",
+      "short_interest": "0",
+      "resolution": {
+        "price": "0.000000",
+        "seq": "12281860505",
+        "market_resolution_ts_ms": "1793256219295"
+      }
+    }
+  ],
+  "seq": "12282511261",
+  "state_time_ms": "1793256955925",
+  "server_time_ms": "1793256955979"
+}

@@ -1,0 +1,56 @@
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "trade_id": "128702",
+        "symbol": "ACA_HOUSE_2026.NOTEXT_DEM",
+        "taker_side": "ASK",
+        "price": "0.900000",
+        "size": "5",
+        "maker": "6xecAJzCZVvL7u67DH55YHdEQx9yxQ4xPBJkwBfGAVHM",
+        "taker": "B1vvi6EXdjbqEy8G4MHtwZdALcWi1jTPL3dWfqBkoB4B",
+        "maker_reduce_only": false,
+        "taker_reduce_only": true,
+        "maker_position_size_prev": "-287",
+        "taker_position_size_prev": "5",
+        "seq": "10778819169",
+        "trade_ts_ms": "1792425997189"
+      },
+      {
+        "trade_id": "121438",
+        "symbol": "ACA_HOUSE_2026.NOTEXT_DEM",
+        "taker_side": "ASK",
+        "price": "0.910000",
+        "size": "4",
+        "maker": "6xecAJzCZVvL7u67DH55YHdEQx9yxQ4xPBJkwBfGAVHM",
+        "taker": "7UoznSJRwRjbuZxng5wJt3BDFL9A3VrsPbce62Zqtj3b",
+        "maker_reduce_only": false,
+        "taker_reduce_only": true,
+        "maker_position_size_prev": "-291",
+        "taker_position_size_prev": "4",
+        "seq": "10296511599",
+        "trade_ts_ms": "1792134422986"
+      },
+      {
+        "trade_id": "115355",
+        "symbol": "ACA_HOUSE_2026.NOTEXT_DEM",
+        "taker_side": "ASK",
+        "price": "0.910000",
+        "size": "31",
+        "maker": "6xecAJzCZVvL7u67DH55YHdEQx9yxQ4xPBJkwBfGAVHM",
+        "taker": "9GJamEv15fvZj39JyuXn1zHgV1PR1s84VpgLrHVJBrXS",
+        "maker_reduce_only": false,
+        "taker_reduce_only": true,
+        "maker_position_size_prev": "-322",
+        "taker_position_size_prev": "31",
+        "seq": "9829992145",
+        "trade_ts_ms": "1791790351592"
+      }
+    ],
+    "next_cursor": "00000000009829992145:0000000000"
+  },
+  "seq": "12282510717",
+  "state_time_ms": "1793256955264",
+  "server_time_ms": "1793256955401"
+}

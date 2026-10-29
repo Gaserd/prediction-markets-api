@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "data": {
+    "code": "INVALID_REQUEST",
+    "message": "query too long: max=32"
+  },
+  "server_time_ms": "1793256930918"
+}

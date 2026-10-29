@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-29T06:55:55.401000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/trades?symbols=ACA_HOUSE_2026.NOTEXT_DEM&limit=3",
+    "method": "GET"
+  },
+  "description": "First page of public trades for ACA_HOUSE_2026.NOTEXT_DEM.",
+  "token_id": "ACA_HOUSE_2026.NOTEXT_DEM"
+}

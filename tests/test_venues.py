@@ -57,6 +57,21 @@ def test_kalshi_fields():
     assert venue.supports_closed_markets is True
 
 
+def test_pascal_fields():
+    """Pascal is a read-only implemented Solana venue. The product is in beta."""
+    venue = VENUES["pascal"]
+    assert venue.url == "https://app.pascal.trade"
+    assert venue.chain is not None
+    assert venue.chain.value == "Solana"
+    assert venue.referral_url is None
+    assert venue.supports_closed_markets is True
+    assert venue.can_read is True
+    assert venue.can_trade is False
+    assert venue.status == VenueStatus.IMPLEMENTED
+    assert venue.liquidity_source is None
+    assert venue.api_key_for_read is False
+
+
 def test_hyperliquid_fields():
     """Test Hyperliquid Outcomes is a read-only implemented venue."""
     venue = VENUES["hyperliquid"]

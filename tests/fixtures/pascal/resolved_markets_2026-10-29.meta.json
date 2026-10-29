@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-10-29T06:55:55.979000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/markets/resolved?lookback=24h&order_by=resolution_time&limit=50",
+    "method": "GET"
+  },
+  "description": "Resolved markets recorded 2026-10-29 with lookback 24h. Trimmed from 50 to the first market, MLB_2026_WS.TB."
+}

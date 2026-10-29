@@ -615,6 +615,18 @@ async def test_list_markets_respects_limit(adapter_config, adapter_fixtures, ada
             assert sum(1 for body in bodies if body.get("type") == "outcomeMeta") == 1
         return
 
+    # Pascal's unresolved listing is one GET /markets snapshot. limit stops
+    # the iterator and must not request the resolved listing as well.
+    if adapter_config.name == "pascal":
+        with respx.mock:
+            route = respx.get(url__regex=r".*/markets.*").mock(
+                return_value=Response(200, json=data)
+            )
+            markets = [market async for market in adapter_client.list_markets(limit=1)]
+            assert len(markets) == 1
+            assert route.call_count == 1
+        return
+
     # Create mock response with multiple pages
     page1 = {"markets": data.get("markets", [])[:1], "nextCursor": "page2"}
     page2 = {"markets": data.get("markets", [])[1:2], "nextCursor": None}
@@ -1332,6 +1344,20 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                     "0x2222222222222222222222222222222222222222",
                 ],
             }
+        elif adapter_config.name == "pascal":
+            # PublicTradeMsg. Prices stay inside 0.50–0.59.
+            cents = 50 + (index % 10)
+            return {
+                "trade_id": str(1000 + index),
+                "symbol": "TEST.MARKET",
+                "taker_side": "BID" if index % 2 == 0 else "ASK",
+                "price": f"0.{cents:02d}0000",
+                "size": str(10 + index),
+                "maker": "MakerPubkey111111111111111111111111111111",
+                "taker": "TakerPubkey111111111111111111111111111111",
+                "seq": str(1000 + index),
+                "trade_ts_ms": str(1791697593000 + index),
+            }
         raise AssertionError(f"no synthetic trade for {adapter_config.name}")
 
     outcome_id = "test_market_123"
@@ -1345,6 +1371,21 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
     elif adapter_config.name == "hyperliquid":
         # recentTrades is one JSON array, not a cursor.
         pages.append([build_trade(i) for i in range(100)])
+    elif adapter_config.name == "pascal":
+        # Three cursor pages, same shape as GET /api/v1/trades.
+        for page_num in range(1, 4):
+            start_idx = (page_num - 1) * 50
+            trades_page = [build_trade(i) for i in range(start_idx, start_idx + 50)]
+            data_obj: dict[str, Any] = {"items": trades_page}
+            if page_num < 3:
+                data_obj["next_cursor"] = f"cursor_{page_num}"
+            pages.append(
+                {
+                    "status": "success",
+                    "data": data_obj,
+                    "server_time_ms": "1791697593000",
+                }
+            )
     else:
         # Polymarket/Kalshi: 3 pages × 50 each = 150 total
         for page_num in range(1, 4):  # 3 pages
@@ -1375,6 +1416,8 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
                     return Response(200, json={"trades": [], "cursor": None})
                 elif adapter_config.name == "hyperliquid":
                     return Response(200, json=[])
+                elif adapter_config.name == "pascal":
+                    return Response(200, json={"status": "success", "data": {"items": []}})
                 else:
                     return Response(200, json={"events": []})
 
@@ -1387,6 +1430,8 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
             route = respx.get(url__regex=r".*/events.*").mock(side_effect=get_next_page)
         elif adapter_config.name == "hyperliquid":
             route = respx.post(HYPERLIQUID_INFO).mock(side_effect=get_next_page)
+        elif adapter_config.name == "pascal":
+            route = respx.get(url__regex=r".*/trades.*").mock(side_effect=get_next_page)
 
         # Test with explicit limit=5 (should fetch exactly 5 from first page)
         page_index[0] = 0

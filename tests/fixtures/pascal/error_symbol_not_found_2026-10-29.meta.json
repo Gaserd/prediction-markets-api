@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-10-29T06:55:30.331000+00:00",
+  "request": {
+    "url": "https://data.pascal.trade/api/v1/books?symbols=DOES_NOT_EXIST.NOPE",
+    "method": "GET"
+  },
+  "description": "HTTP 422 SYMBOL_NOT_FOUND for an unknown book symbol. Recorded 2026-10-29."
+}

@@ -1,0 +1,14 @@
+{
+  "status": "success",
+  "data": {
+    "books": {
+      "AI_BEST_MATH_26OCT31.MICROSOFT": {
+        "asks": [],
+        "bids": []
+      }
+    }
+  },
+  "seq": "12282510539",
+  "state_time_ms": "1793256955112",
+  "server_time_ms": "1793256955136"
+}
