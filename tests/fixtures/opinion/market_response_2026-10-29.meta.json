@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T11:06:07.673328+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market/7991",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market/7991",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet GET /openapi/market/7991 (no API key)"
+}

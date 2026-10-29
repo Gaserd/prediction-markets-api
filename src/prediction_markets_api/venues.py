@@ -136,18 +136,28 @@ VENUES: dict[str, VenueInfo] = {
     ),
     "opinion": VenueInfo(
         name="Opinion",
-        chain=None,  # Unknown
-        geo_restrictions=None,
+        # BNB Chain (chain id 56). Terms: https://docs.opinion.trade/legal/terms-of-use
+        chain=Chain.BNB,
+        # Restricted Jurisdictions in the Terms of Use. The sanctions clause
+        # says "including but not limited to" and is not exhaustive.
+        # https://docs.opinion.trade/legal/terms-of-use
+        geo_restrictions=(
+            "Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, "
+            "Thailand, South Korea, China, Taiwan, Hong Kong, Iran, Syria, Cuba, "
+            "North Korea, Crimea, Donetsk, Luhansk (see ToS for the full list)"
+        ),
+        # Public market, book, and price reads. No public trade feed:
+        # get_trades raises NotImplementedError. Own fills are trading 1.0.
         api_key_for_read=False,
         api_key_for_trade=True,
-        can_read=False,
-        can_trade=False,
-        status=VenueStatus.PLANNED,
+        can_read=True,
+        can_trade=False,  # Stub only; place_order does not submit
+        status=VenueStatus.IMPLEMENTED,
         signup_link_key="opinion",
-        liquidity_source=None,  # Unknown until implemented
-        url="https://opinion.finance",
+        liquidity_source=None,  # Market payload has no liquidity field
+        url="https://opinion.trade",
         referral_url=None,
-        supports_closed_markets=False,
+        supports_closed_markets=True,  # GET /openapi/market?status=resolved
     ),
     "pascal": VenueInfo(
         name="Pascal",

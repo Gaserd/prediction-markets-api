@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T13:55:53.554972+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market?page=108&limit=20&status=resolved&marketType=1",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market?page=108&limit=20&status=resolved&marketType=1",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet listing row for categorical parent 99 from GET /openapi/market?page=108&limit=20&status=resolved&marketType=1 (marketId 99, status Activated, childMarkets kept in full, no API key)"
+}

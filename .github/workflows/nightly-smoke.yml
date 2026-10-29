@@ -63,7 +63,8 @@ jobs:
           {"venue": "limitless", "required_secrets": "", "api_base": "", "demo_only": false},
           {"venue": "hyperliquid", "required_secrets": "", "api_base": "", "demo_only": false},
           {"venue": "pascal", "required_secrets": "", "api_base": "", "demo_only": false},
-          {"venue": "predict_fun", "required_secrets": "PREDICTFUN_API_KEY", "api_base": "", "demo_only": false}
+          {"venue": "predict_fun", "required_secrets": "PREDICTFUN_API_KEY", "api_base": "", "demo_only": false},
+          {"venue": "opinion", "required_secrets": "", "api_base": "", "demo_only": false}
           ]
           JSON
 

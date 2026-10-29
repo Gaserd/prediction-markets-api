@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Read-only **Opinion** adapter (`OpinionClient`, BNB Chain, chain id 56).
+  Public market, order book, and price reads use `https://openapi.opinion.trade/openapi`
+  and do not send an API key. `OPINION_API_KEY` is not read. There is no
+  public trade feed: `get_trades` and `iter_trades` raise `NotImplementedError`
+  before any request. Own-trade history is planned for trading 1.0. No testnet
+  host is published. Docs: https://docs.opinion.trade/developer-guide/opinion-open-api/.
+  Terms: https://docs.opinion.trade/legal/terms-of-use. `list_markets` uses
+  `GET /openapi/market` with a fixed page size `min(page_size, 20)` (`page`
+  starts at 1; server default 10, silently clamped to 20; `marketType` defaults
+  to `2`). The caller's `limit` truncates on the client. `closed=False` sends
+  `status=activated` and drops markets that are not `OPEN`. Only `Activated`
+  (2) is `OPEN`, and only while `cutoffAt` is unset or still in the future. A
+  past cutoff is `CLOSED` and `venue_status` stays `Activated`. `Created`,
+  `Resolving`, `Failed`, and `Deleted` are `CLOSED`. `Resolved` (4) is
+  `RESOLVED`. A categorical parent is `OPEN` when at least one child is still
+  tradable and the parent's own cutoff has not passed. The parent is
+  `RESOLVED` only when its own status is `Resolved`. A `status=resolved`
+  listing that contains only resolved children does not make the parent
+  `RESOLVED`, so `list_markets(closed=True)` does not return it. List and get
+  use that same rule.
+  Categorical parent ids are `categorical-<id>` because binary and categorical
+  numbers overlap; the venue number stays on `raw_data`. A bare id calls only
+  `GET /openapi/market/{id}`, and `categorical-<id>` calls only
+  `GET /openapi/market/categorical/{id}`. Child outcome ids are
+  `categorical-<parent id>:<tokenId>`. An unknown categorical id
+  (`result.data` null) is `NotFoundError`. A 5xx on a later page raises
+  `VenueAPIError` naming that page and cursor. A non-JSON 5xx body names the
+  HTTP status and `non-JSON body`. `get_order_book`
+  requests the YES token and derives the NO book from it (`1 - price`, sides
+  swapped); the NO book is not fetched separately. Outcome names are the venue
+  labels. A full outcome id is checked with `get_market` before the book
+  request. Quote notionals are USDT and are reported as `USD`.
+  `Market.liquidity` is `None`. `Outcome.price` stays `None` on an open listing.
 - Read-only **Predict.fun** adapter (`PredictFunClient`, BNB Chain). Mainnet
   `https://api.predict.fun` requires `PREDICTFUN_API_KEY` (`x-api-key`); the key
   is read only from that environment variable, is not logged, and is masked as

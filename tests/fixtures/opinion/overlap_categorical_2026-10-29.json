@@ -1,0 +1,169 @@
+{
+  "errmsg": "",
+  "errno": 0,
+  "result": {
+    "data": {
+      "chainId": "56",
+      "childMarkets": [
+        {
+          "chainId": "56",
+          "conditionId": "099ff164184ff040b19850a9d933fe08f1743120c6a392faa3e3320e0df1c122",
+          "createdAt": 1790242956,
+          "cutoffAt": 0,
+          "isResolvableByAI": true,
+          "marketId": 41491,
+          "marketTitle": "50+ bps decrease",
+          "noLabel": "No",
+          "noTokenId": "4037998675396655413252490327918541645488838251610601964503200837631621632156",
+          "questionId": "b8872b8893be6f5f42db27abc314dc558b08cad522e1eca1cf3b7531b53c6129",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 0,
+          "resultTokenId": "",
+          "rules": "",
+          "slug": "fed-decision-in-october-50-plus-bps-decrease",
+          "status": 2,
+          "statusEnum": "Activated",
+          "volume": "0",
+          "yesLabel": "Yes",
+          "yesTokenId": "75059440893578671129111383204972480529526020509716266861113711587346926275780"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "95f33e579d100ac1891aa621b56e35909ebfdadba6372c11491bc00735c1bf3b",
+          "createdAt": 1790242958,
+          "cutoffAt": 0,
+          "isResolvableByAI": true,
+          "marketId": 41492,
+          "marketTitle": "25 bps decrease",
+          "noLabel": "No",
+          "noTokenId": "6849016010940927772445247927440155881038958533286592561330712327762090339394",
+          "questionId": "79fa3087cfeb6699c6394d03d2bc4b48072345b3b0e236ae635a1879701e63fd",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 0,
+          "resultTokenId": "",
+          "rules": "",
+          "slug": "fed-decision-in-october-25-bps-decrease",
+          "status": 2,
+          "statusEnum": "Activated",
+          "volume": "0",
+          "yesLabel": "Yes",
+          "yesTokenId": "27025501816972440384160940321579217726795932730768303607575647903340643401215"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "fcc8fbeebdf9f181bae7887bf1c8ae63dd6aa38af2a83f0cb09b935eee3b88ab",
+          "createdAt": 1790242959,
+          "cutoffAt": 0,
+          "isResolvableByAI": true,
+          "marketId": 41493,
+          "marketTitle": "No change",
+          "noLabel": "No",
+          "noTokenId": "60212383659994111870497497491023641072462717253586894904167138264962850342342",
+          "questionId": "15540238fe65c593409bfbff75fbed031967b5c1718f9a4898610404ec3ae617",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 0,
+          "resultTokenId": "",
+          "rules": "",
+          "slug": "fed-decision-in-october-no-change",
+          "status": 2,
+          "statusEnum": "Activated",
+          "volume": "0",
+          "yesLabel": "Yes",
+          "yesTokenId": "80845247066529630665888394020611932949693549085702059535232730234243205119602"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "7aec04cb4db0f3222d2be4b0f8e111491b40c8c5d65bb896e4905dc9cb99466c",
+          "createdAt": 1790242960,
+          "cutoffAt": 0,
+          "isResolvableByAI": true,
+          "marketId": 41494,
+          "marketTitle": "25 bps increase",
+          "noLabel": "No",
+          "noTokenId": "2114829301600198850335235966470080129654244480261776138184709263358398970062",
+          "questionId": "7b92de1eec3820437f6a802863bb01fe99c84010357d8349509ef45620f84ccc",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 0,
+          "resultTokenId": "",
+          "rules": "",
+          "slug": "fed-decision-in-october-25-bps-increase",
+          "status": 2,
+          "statusEnum": "Activated",
+          "volume": "0",
+          "yesLabel": "Yes",
+          "yesTokenId": "36701275815065602800580199194189225085623801204069007409061603736632754026118"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "f1c9ca5a255f7c2aabf111786d769f3154dc67658dce3ab21a5c65e322fa6410",
+          "createdAt": 1790242961,
+          "cutoffAt": 0,
+          "isResolvableByAI": true,
+          "marketId": 41495,
+          "marketTitle": "50+ bps increase",
+          "noLabel": "No",
+          "noTokenId": "14836678853900443959791163643561648093369833354647359530385585706988863511341",
+          "questionId": "6802896fdf05322c03bddf5800be990731b33f68ab098655cede99fbfdd2f66c",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 0,
+          "resultTokenId": "",
+          "rules": "",
+          "slug": "fed-decision-in-october-50-plus-bps-increase",
+          "status": 2,
+          "statusEnum": "Activated",
+          "volume": "0",
+          "yesLabel": "Yes",
+          "yesTokenId": "96999761523947684106424140324532510806129110980729447283195923287445257181381"
+        }
+      ],
+      "conditionId": "",
+      "coverUrl": "",
+      "createdAt": 1790242956,
+      "cutoffAt": 1793491200,
+      "isResolvableByAI": false,
+      "labelIds": [
+        100002
+      ],
+      "labels": [
+        "Macro"
+      ],
+      "marketId": 2592,
+      "marketTitle": "Fed Decision in October?",
+      "marketType": 1,
+      "noLabel": "",
+      "noTokenId": "",
+      "questionId": "b8872b8893be6f5f42db27abc314dc558b08cad522e1eca1cf3b7531b53c6129",
+      "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+      "rebate": {
+        "maker": 0.5
+      },
+      "resolvedAt": 0,
+      "resultTokenId": "",
+      "rules": "The FED interest rates are defined in this market by the upper bound of the target federal funds range. The decisions on the target federal funds range are made by the Federal Open Market Committee (FOMC) meetings.\n\nThis market will resolve to the amount of basis points the upper bound of the target federal funds rate is changed by versus the level it was prior to the Federal Reserve's October 2026 meeting.\n\nIf the target federal funds rate is changed to a level not expressed in the displayed options, the change will be rounded up to the nearest 25 and will resolve to the relevant bracket. (e.g. if there's a cut/increase of 12.5 bps it will be considered to be 25 bps)\n\nThe resolution source for this market is the FOMC\u2019s statement after its meeting scheduled for October 27-28, 2026 according to the official calendar: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm.\n\nThe level and change of the target federal funds rate is also published at the official website of the Federal Reserve at https://www.federalreserve.gov/monetarypolicy/openmarket.htm.\n\nThis market may resolve as soon as the FOMC\u2019s statement for their October meeting with relevant data is issued. If no statement is released by the end date of the next scheduled meeting, this market will resolve to the \"No change\" bracket.",
+      "slug": "fed-decision-in-october",
+      "status": 1,
+      "statusEnum": "Created",
+      "thumbnailUrl": "https://images.opinion.trade/0xf988d66bd9c46b69d33e2703f7264d3c2267136c/0x2a3a7c670d1778643aa0091bc4fa08ef6c0c413f1e1b8c8dcf5db3acc3fab875",
+      "volume": "0.00",
+      "volume24h": "0.00",
+      "volume7d": "0.00",
+      "yesLabel": "",
+      "yesTokenId": ""
+    }
+  }
+}

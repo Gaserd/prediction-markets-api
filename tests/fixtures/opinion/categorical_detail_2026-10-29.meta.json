@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T11:06:10.099473+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market/categorical/3825",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market/categorical/3825",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet GET /openapi/market/categorical/3825 (no API key)"
+}

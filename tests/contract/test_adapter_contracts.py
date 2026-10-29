@@ -49,6 +49,11 @@ def mock_markets(adapter_name: str, payload: Any) -> Any:
     """Mock the listing endpoint. Hyperliquid posts outcomeMeta to /info."""
     if adapter_name == "hyperliquid":
         return respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=payload))
+    if adapter_name == "opinion":
+        # `/openapi/market` is not matched by `.*/markets.*`.
+        return respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
+            return_value=Response(200, json=payload)
+        )
     return respx.get(url__regex=r".*/markets.*").mock(return_value=Response(200, json=payload))
 
 
@@ -61,6 +66,44 @@ def mock_order_book(adapter_name: str, payload: Any) -> Any:
             return_value=Response(200, json=payload)
         )
     if adapter_name == "predict_fun":
+        return respx.get(url__regex=r".*/orderbook.*").mock(
+            return_value=Response(200, json=payload)
+        )
+    if adapter_name == "opinion":
+        # A bare market id is resolved with get_market before the YES-token book.
+        def opinion_market(request: Any) -> Response:
+            market_id = request.url.path.rstrip("/").rsplit("/", 1)[-1]
+            token = "1"
+            result = payload.get("result") if isinstance(payload, dict) else None
+            if isinstance(result, dict) and result.get("tokenId"):
+                token = str(result["tokenId"])
+            body = {
+                "errno": 0,
+                "errmsg": "",
+                "result": {
+                    "data": {
+                        "marketId": int(market_id) if str(market_id).isdigit() else market_id,
+                        "marketTitle": "fixture",
+                        "status": 2,
+                        "statusEnum": "Activated",
+                        "marketType": 0,
+                        "createdAt": 1700000000,
+                        "cutoffAt": 0,
+                        "resolvedAt": 0,
+                        "yesLabel": "YES",
+                        "noLabel": "NO",
+                        "yesTokenId": token,
+                        "noTokenId": "2",
+                        "resultTokenId": "",
+                        "rules": "",
+                        "volume": "0",
+                        "childMarkets": None,
+                    }
+                },
+            }
+            return Response(200, json=body)
+
+        respx.get(url__regex=r".*/openapi/market/\d+$").mock(side_effect=opinion_market)
         return respx.get(url__regex=r".*/orderbook.*").mock(
             return_value=Response(200, json=payload)
         )
@@ -648,6 +691,17 @@ async def test_list_markets_respects_limit(adapter_config, adapter_fixtures, ada
             assert route.call_count == 1
         return
 
+    # Opinion pages with `page`. limit=1 must not request page 2.
+    if adapter_config.name == "opinion":
+        with respx.mock:
+            route = respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
+                return_value=Response(200, json=data)
+            )
+            markets = [market async for market in adapter_client.list_markets(limit=1)]
+            assert len(markets) == 1
+            assert route.call_count == 1
+        return
+
     # Create mock response with multiple pages
     page1 = {"markets": data.get("markets", [])[:1], "nextCursor": "page2"}
     page2 = {"markets": data.get("markets", [])[1:2], "nextCursor": None}
@@ -1221,11 +1275,17 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             mock_data = {"outcomes": [], "questions": []}
         elif adapter_config.name == "predict_fun":
             mock_data = {"success": True, "cursor": None, "data": []}
+        elif adapter_config.name == "opinion":
+            mock_data = {"errno": 0, "errmsg": "", "result": {"total": 0, "list": []}}
         else:
             mock_data = []
 
         if adapter_config.name == "hyperliquid":
             route = respx.post(HYPERLIQUID_INFO).mock(return_value=Response(200, json=mock_data))
+        elif adapter_config.name == "opinion":
+            route = respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
+                return_value=Response(200, json=mock_data)
+            )
         else:
             route = respx.get(url__regex=r".*/markets.*").mock(
                 return_value=Response(200, json=mock_data)
@@ -1254,6 +1314,10 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             assert json.loads(request.content)["type"] == "outcomeMeta"
         elif adapter_config.name == "predict_fun":
             assert params.get("status") == "OPEN"
+            assert "closed" not in params
+        elif adapter_config.name == "opinion":
+            assert params.get("status") == "activated"
+            assert params.get("marketType") == "2"
             assert "closed" not in params
 
         # Test closed=True (Limitless and Hyperliquid raise NotImplementedError)
@@ -1286,6 +1350,10 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
             elif adapter_config.name == "predict_fun":
                 assert params.get("status") == "RESOLVED"
                 assert "closed" not in params
+            elif adapter_config.name == "opinion":
+                assert params.get("status") == "resolved"
+                assert params.get("marketType") == "2"
+                assert "closed" not in params
 
         # Test closed=None (no filter)
         route.calls.clear()
@@ -1315,6 +1383,10 @@ async def test_closed_filter_request_params(adapter_config, adapter_client):
         elif adapter_config.name == "predict_fun":
             assert "status" not in params, "Predict.fun closed=None must not send status param"
             assert "closed" not in params, "Predict.fun closed=None must not send closed param"
+        elif adapter_config.name == "opinion":
+            assert "status" not in params, "Opinion closed=None must not send status param"
+            assert "closed" not in params, "Opinion closed=None must not send closed param"
+            assert params.get("marketType") == "2"
 
 
 # =============================================================================
@@ -1332,6 +1404,17 @@ async def test_get_trades_limit_and_pagination(adapter_config, adapter_client):
     - iter_trades() paginates until exhausted (no limit)
     - No page requested after limit is reached
     """
+    # Opinion has no public trade feed. Own fills are trading 1.0.
+    if adapter_config.name == "opinion":
+        with respx.mock as router:
+            with pytest.raises(NotImplementedError, match="public trade feed"):
+                async for _ in adapter_client.get_trades("1", limit=1):
+                    pass
+            with pytest.raises(NotImplementedError, match="public trade feed"):
+                async for _ in adapter_client.iter_trades("1"):
+                    pass
+            assert router.calls.call_count == 0
+        return
 
     # Build 3 pages × 50 synthetic trades each = 150 total
     def build_trade(index: int) -> dict:
@@ -1677,6 +1760,10 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
             respx.post(HYPERLIQUID_INFO).mock(
                 return_value=Response(429, json={"error": "rate limit exceeded"})
             )
+        elif adapter_config.name == "opinion":
+            respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
+                return_value=Response(429, json={"errmsg": "rate limit exceeded", "errno": 429})
+            )
         else:
             respx.get(url__regex=r".*/markets.*").mock(
                 return_value=Response(429, json={"error": "rate limit exceeded"})
@@ -1691,6 +1778,10 @@ async def test_exception_hierarchy_and_error_mapping(adapter_config, adapter_cli
         if adapter_config.name == "hyperliquid":
             respx.post(HYPERLIQUID_INFO).mock(
                 return_value=Response(503, json={"error": "service unavailable"})
+            )
+        elif adapter_config.name == "opinion":
+            respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
+                return_value=Response(503, json={"errmsg": "service unavailable", "errno": 503})
             )
         else:
             respx.get(url__regex=r".*/markets.*").mock(

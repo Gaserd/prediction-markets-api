@@ -106,14 +106,14 @@ def load_fixtures(adapter: AdapterConfig) -> dict[str, dict[str, Any]]:
         fixture_name = _FIXTURE_DATE.sub("", fixture_file.stem)
         meta_file = fixture_file.with_suffix(".meta.json")
 
-        # Load fixture data
-        with open(fixture_file) as f:
+        # Load fixture data. Windows defaults to cp1252; fixtures are UTF-8.
+        with open(fixture_file, encoding="utf-8") as f:
             data = json.load(f)
 
         # Load metadata if available
         meta = None
         if meta_file.exists():
-            with open(meta_file) as f:
+            with open(meta_file, encoding="utf-8") as f:
                 meta = json.load(f)
 
         fixtures[fixture_name] = {"data": data, "meta": meta}

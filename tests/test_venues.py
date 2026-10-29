@@ -1,6 +1,7 @@
 """Tests for venue registry."""
 
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +11,7 @@ from prediction_markets_api import (
     HyperliquidClient,
     KalshiClient,
     LimitlessClient,
+    OpinionClient,
     PolymarketClient,
     PredictFunClient,
 )
@@ -107,6 +109,44 @@ async def test_predict_fun_lists_resolved_markets():
     with patch.object(client._http_client, "request", new=AsyncMock(return_value=mock_response)):
         markets = [market async for market in client.list_markets(closed=True, limit=1)]
     assert markets == []
+    await client.close()
+
+
+def test_opinion_fields():
+    """Opinion is a read-only BNB Chain venue. Public reads do not need an API key."""
+    venue = VENUES["opinion"]
+    assert venue.url == "https://opinion.trade"
+    assert venue.chain is not None
+    assert venue.chain.value == "BNB Chain"
+    assert venue.referral_url is None
+    assert venue.supports_closed_markets is True
+    assert venue.can_read is True
+    assert venue.can_trade is False
+    assert venue.status == VenueStatus.IMPLEMENTED
+    assert venue.liquidity_source is None
+    assert venue.api_key_for_read is False
+    assert venue.geo_restrictions == (
+        "Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, "
+        "Thailand, South Korea, China, Taiwan, Hong Kong, Iran, Syria, Cuba, "
+        "North Korea, Crimea, Donetsk, Luhansk (see ToS for the full list)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_opinion_lists_resolved_markets():
+    """closed=True is supported and asks the venue for resolved markets."""
+    client = OpinionClient()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"errno": 0, "errmsg": "", "result": {"total": 0, "list": []}}
+    mock_response.headers = {}
+    request = AsyncMock(return_value=mock_response)
+
+    with patch.object(client._http_client, "request", new=request):
+        markets = [market async for market in client.list_markets(closed=True, limit=1)]
+    assert markets == []
+    assert request.await_args is not None
+    assert request.await_args.kwargs["params"]["status"] == "resolved"
     await client.close()
 
 
@@ -212,7 +252,7 @@ def test_readme_table_generated_correctly():
     # Generate the table
     script_path = Path(__file__).parent.parent / "scripts" / "gen_venues_table.py"
     result = subprocess.run(
-        ["python3", str(script_path)],
+        [sys.executable, str(script_path)],
         capture_output=True,
         text=True,
         check=True,
@@ -238,7 +278,15 @@ def test_referral_links_in_readme():
     readme_table = readme_content[start_idx:end_idx].strip()
 
     # Check each venue
-    for venue_key in ["limitless", "polymarket", "kalshi", "hyperliquid", "pascal", "predict_fun"]:
+    for venue_key in [
+        "limitless",
+        "polymarket",
+        "kalshi",
+        "hyperliquid",
+        "pascal",
+        "predict_fun",
+        "opinion",
+    ]:
         venue = VENUES[venue_key]
 
         if venue.referral_url:

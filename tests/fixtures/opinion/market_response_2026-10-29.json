@@ -1,0 +1,46 @@
+{
+  "errmsg": "",
+  "errno": 0,
+  "result": {
+    "data": {
+      "chainId": "56",
+      "childMarkets": null,
+      "conditionId": "1004e9483b5b1aa2edeb16923b75b101f1a377a7208e5ff853d01620ed131d03",
+      "coverUrl": "",
+      "createdAt": 1772094600,
+      "cutoffAt": 1798675200,
+      "incentiveFactor": {},
+      "isResolvableByAI": true,
+      "labelIds": [
+        3,
+        6
+      ],
+      "labels": [
+        "Crypto",
+        "Business"
+      ],
+      "marketId": 7991,
+      "marketTitle": "SEBI Finds Jane Street Manipulated Markets by 2026\uff1f",
+      "marketType": 0,
+      "noLabel": "NO",
+      "noTokenId": "94757572192907914605700126551902789631515912963498869181522400252869100259261",
+      "questionId": "6004be74d191139b847e8dfbfa02742add0bca7a587e0702163f7bfa4d2b4d8a",
+      "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+      "rebate": {
+        "maker": 0.5
+      },
+      "resolvedAt": 0,
+      "resultTokenId": "",
+      "rules": "Resolution Deadline\n\nDecember 31, 2026, 11:59 PM IST.\n\nThis market resolves to\u201cYes\u201dif by the resolution deadline, the Securities and Exchange Board of India (SEBI) publishes or issues a Final Order or Adjudication Order that explicitly concludes that Jane Street: engaged in market manipulation, fraud, or unfair trade practices, or violated the SEBI Prohibition of Fraudulent and Unfair Trade Practices Regulations (PFUTP).\n\nThis market resolves to\u201cNo\u201dif, by the resolution deadline: no qualifying SEBI Final Order / Adjudication Order is issued, or SEBI issues only interim orders, show-cause notices, investigation updates, press statements, or charges/allegations without a qualifying final determination.\n\nEdge case: \n\nJudicial Overrule. If SEBI issues a qualifying final finding that would otherwise trigger \u201cYes\u201d, but before the resolution deadline that finding is fully set aside / vacated (i.e., completely nullified on the merits) by either: the Securities Appellate Tribunal (SAT), or the Supreme Court of India, then the market resolves \u201cNo.\u201d\n\nNotes for clarity:\n\nIf an appeal is pending, or the SEBI order is stayed but not fully set aside/vacated, the market still resolves based on whether a qualifying SEBI final order exists by the deadline.\n\nIf a court/SAT partially modifies the SEBI order but leaves intact a conclusion that Jane Street violated PFUTP / engaged in manipulation, it remains \u201cYes.\u201d\n\nPrimary Sources\n\nSEBI official order/publication pages, official gazette postings, or SEBI press releases linking to the order.\n\nIf SEBI documents are not accessible, a consensus of reputable reporting that reproduces the key conclusion and identifies the order type and date.",
+      "slug": "sebi-finds-jane-street-manipulated-markets-by-2026",
+      "status": 2,
+      "statusEnum": "Activated",
+      "thumbnailUrl": "https://images.opinion.trade/0xf988d66bd9c46b69d33e2703f7264d3c2267136c/0x0e1b87e3474639048ba087503973ce2dd997710587c31ff75ee00c452882a8c5",
+      "volume": "28640.456",
+      "volume24h": "4030.6255",
+      "volume7d": "4030.6255",
+      "yesLabel": "YES",
+      "yesTokenId": "101148725486430091011559035327719375918177400773306730490956158995965676286488"
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "errmsg": "",
+  "errno": 0,
+  "result": {
+    "list": [
+      {
+        "chainId": "56",
+        "childMarkets": null,
+        "conditionId": "",
+        "coverUrl": "",
+        "createdAt": 1793268669,
+        "cutoffAt": 1793338200,
+        "isResolvableByAI": false,
+        "labelIds": [
+          8,
+          100025,
+          100026
+        ],
+        "labels": [
+          "Sports",
+          "Tennis",
+          "WTA"
+        ],
+        "marketId": 52398,
+        "marketTitle": "Elena Rybakina vs Leylah Fernandez",
+        "marketType": 0,
+        "noLabel": "Leylah Fernandez",
+        "noLabelShort": "FERN",
+        "noTokenId": "52262932819037074197842560476832864749653818101087069298407558640597122396203",
+        "questionId": "710ef66108e6f7dbe4d28b4a6825d6a48915f7972d8f09ffd0c0d6d583890284",
+        "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+        "rebate": {
+          "maker": 0.5
+        },
+        "resolvedAt": 0,
+        "resultTokenId": "",
+        "rules": "In the upcoming WTA singles match scheduled for 2026-10-30 05:30 UTC: if Elena Rybakina wins the match, this market resolves to \"Elena Rybakina\"; if Leylah Fernandez wins, it resolves to \"Leylah Fernandez\". The winner is the first player to claim the required number of sets under the match's official best-of format.\n\nIf the match begins but is not completed, a retirement or default counts the opposing player as the winner. If a walkover is declared before the first point is played, the match is outright canceled, or it is delayed beyond 7 days from the scheduled date without a winner determined, this market will resolve to 50-50.\n\nSuspensions caused by weather, fading light, or other tournament-imposed delays do not close this market \u2014 it stays open until the match is officially completed, provided it concludes within the 7-day window mentioned above.\n\nResolution Source: The official WTA Tour scoring page.\n\nNote: This market will resolve strictly based on the first officially published result from the designated source. Any subsequent revisions will not affect this resolution.",
+        "slug": "elena-rybakina-vs-leylah-fernandez-twvr9vi",
+        "status": 2,
+        "statusEnum": "Activated",
+        "thumbnailUrl": "",
+        "volume": "0",
+        "volume24h": "0",
+        "volume7d": "0",
+        "yesLabel": "Elena Rybakina",
+        "yesLabelShort": "RYBA",
+        "yesTokenId": "71437210775691316776255411762598880583069901682985962276948373720166374869699"
+      },
+      {
+        "chainId": "56",
+        "childMarkets": null,
+        "conditionId": "",
+        "coverUrl": "",
+        "createdAt": 1793261452,
+        "cutoffAt": 1793329200,
+        "isResolvableByAI": false,
+        "labelIds": [
+          8,
+          100025,
+          100026
+        ],
+        "labels": [
+          "Sports",
+          "Tennis",
+          "WTA"
+        ],
+        "marketId": 52389,
+        "marketTitle": "Mia Pohankova vs Alycia Parks",
+        "marketType": 0,
+        "noLabel": "Alycia Parks",
+        "noLabelShort": "PARK",
+        "noTokenId": "84782682353044420997277053230877814563559877434495007849206097466810099408126",
+        "questionId": "affa93a41d67eeaef69204ca3b157a781718b650aee9eb359747d033cde467c8",
+        "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+        "rebate": {
+          "maker": 0.5
+        },
+        "resolvedAt": 0,
+        "resultTokenId": "",
+        "rules": "In the upcoming WTA singles match scheduled for 2026-10-30 03:00 UTC: if Mia Pohankova wins the match, this market resolves to \"Mia Pohankova\"; if Alycia Parks wins, it resolves to \"Alycia Parks\". The winner is the first player to claim the required number of sets under the match's official best-of format.\n\nIf the match begins but is not completed, a retirement or default counts the opposing player as the winner. If a walkover is declared before the first point is played, the match is outright canceled, or it is delayed beyond 7 days from the scheduled date without a winner determined, this market will resolve to 50-50.\n\nSuspensions caused by weather, fading light, or other tournament-imposed delays do not close this market \u2014 it stays open until the match is officially completed, provided it concludes within the 7-day window mentioned above.\n\nResolution Source: The official WTA Tour scoring page.\n\nNote: This market will resolve strictly based on the first officially published result from the designated source. Any subsequent revisions will not affect this resolution.",
+        "slug": "mia-pohankova-vs-alycia-parks",
+        "status": 2,
+        "statusEnum": "Activated",
+        "thumbnailUrl": "",
+        "volume": "0",
+        "volume24h": "0",
+        "volume7d": "0",
+        "yesLabel": "Mia Pohankova",
+        "yesLabelShort": "POHA",
+        "yesTokenId": "100442372370178831814027376548805743659452628248105767708823438230307504932307"
+      }
+    ],
+    "total": 166
+  }
+}

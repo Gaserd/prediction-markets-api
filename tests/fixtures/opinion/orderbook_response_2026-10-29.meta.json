@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-10-29T11:06:07.392131+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/token/orderbook?token_id=101148725486430091011559035327719375918177400773306730490956158995965676286488",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/token/orderbook?token_id=101148725486430091011559035327719375918177400773306730490956158995965676286488",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet YES-token order book for market 7991 (no API key)",
+  "token_id": "7991"
+}

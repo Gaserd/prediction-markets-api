@@ -16,7 +16,15 @@ def generate_table() -> str:
         "|---|---|---|---|---|",
     ]
 
-    for venue_key in ["limitless", "polymarket", "kalshi", "hyperliquid", "pascal", "predict_fun"]:
+    for venue_key in [
+        "limitless",
+        "polymarket",
+        "kalshi",
+        "hyperliquid",
+        "pascal",
+        "predict_fun",
+        "opinion",
+    ]:
         venue = VENUES[venue_key]
 
         # Sign up column - use referral link if available, otherwise plain URL
@@ -40,6 +48,8 @@ def generate_table() -> str:
         notes = []
         if venue.referral_url:
             notes.append(f"plain link: {venue.url}")
+        if venue_key == "opinion":
+            notes.append("no public trade feed")
         notes_str = " ".join(notes) if notes else ""
 
         lines.append(
