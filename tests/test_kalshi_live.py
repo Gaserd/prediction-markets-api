@@ -1,5 +1,7 @@
 """Live tests for Kalshi adapter (opt-in with -m live)."""
 
+import os
+
 import pytest
 
 from prediction_markets_api import KalshiClient
@@ -182,3 +184,17 @@ async def test_get_trades_live():
             trades.append(trade)
 
         print(f"\nFetched {len(trades)} trades for {ticker}")
+
+
+@pytest.mark.live
+@pytest.mark.timeout(30)
+def test_api_base_follows_demo_smoke_setting() -> None:
+    """Nightly smoke sets KALSHI_API_BASE so this job does not call production.
+
+    With the variable unset, the adapter's public production read host is unchanged.
+    """
+    configured = os.environ.get("KALSHI_API_BASE", "").strip().rstrip("/")
+    if not configured:
+        assert KalshiClient.API_BASE == "https://api.elections.kalshi.com/trade-api/v2"
+        return
+    assert KalshiClient.API_BASE == configured

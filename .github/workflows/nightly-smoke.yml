@@ -1,0 +1,141 @@
+# Live smoke against real venues. Not a pull-request check and not required on main.
+# A venue failure opens or updates one GitHub issue. It does not fail PR CI.
+#
+# Add a venue: one object in the list below.
+# The job runs pytest -m live tests/test_<venue>_live.py.
+# If that file is missing or collects nothing, the job skips (predict_fun before
+# its tests land). If required_secrets is set, also pass that secret in the
+# smoke job env. An empty secret skips the job with "skipped: no key".
+#
+# Schedule is 00:00 UTC, which is 03:00 Europe/Moscow (UTC+3, no daylight saving).
+# No retries: live tests already fail on RateLimitError, and a rerun would hide
+# that. Per-test timeout markers still apply; --timeout=120 covers tests that
+# have no marker.
+
+name: Nightly live smoke
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      venues:
+        description: "Venues to run, comma or space separated (empty = all)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    name: Select venues
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      venues: ${{ steps.select.outputs.venues }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Filter the venue list
+        id: select
+        env:
+          SELECTED_VENUES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.venues || '' }}
+        run: |
+          python3 scripts/nightly_smoke.py select --github-output "$GITHUB_OUTPUT" <<'JSON'
+          [
+          {"venue": "polymarket", "required_secrets": "", "api_base": "", "demo_only": false},
+          {"venue": "kalshi", "required_secrets": "", "api_base": "https://external-api.demo.kalshi.co/trade-api/v2", "demo_only": true},
+          {"venue": "limitless", "required_secrets": "", "api_base": "", "demo_only": false},
+          {"venue": "hyperliquid", "required_secrets": "", "api_base": "", "demo_only": false},
+          {"venue": "pascal", "required_secrets": "", "api_base": "", "demo_only": false},
+          {"venue": "predict_fun", "required_secrets": "PREDICTFUN_API_KEY", "api_base": "", "demo_only": false}
+          ]
+          JSON
+
+  smoke:
+    name: live ${{ matrix.venue }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.venues) }}
+    env:
+      VENUE: ${{ matrix.venue }}
+      REQUIRED_SECRETS: ${{ matrix.required_secrets }}
+      DEMO_ONLY: ${{ matrix.demo_only }}
+      # Kalshi reads stay on the demo host. Production is never set here.
+      KALSHI_API_BASE: ${{ matrix.demo_only && matrix.api_base || '' }}
+      # Optional demo credentials. Current Kalshi live tests do not read them.
+      # They must be demo keys if you add any. A missing pair does not skip Kalshi.
+      KALSHI_API_KEY: ${{ matrix.venue == 'kalshi' && secrets.KALSHI_API_KEY || '' }}
+      KALSHI_API_SECRET: ${{ matrix.venue == 'kalshi' && secrets.KALSHI_API_SECRET || '' }}
+      # Predict.fun mainnet reads. Missing value -> "skipped: no key".
+      PREDICTFUN_API_KEY: ${{ matrix.venue == 'predict_fun' && secrets.PREDICTFUN_API_KEY || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Skip when tests or a required key are missing
+        id: gate
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/nightly_smoke.py gate \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --github-output "$GITHUB_OUTPUT" \
+            --update-issues
+
+      - name: Run live tests
+        id: pytest
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: |
+          set +e
+          python -m pytest -m live "tests/test_${VENUE}_live.py" \
+            --override-ini addopts= \
+            --tb=short \
+            --junitxml smoke-junit.xml \
+            -p no:cacheprovider \
+            --timeout=120
+          code=$?
+          echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      - name: Publish the job summary and venue issue
+        if: steps.gate.outputs.run == 'true'
+        env:
+          PYTEST_EXIT: ${{ steps.pytest.outputs.exitcode }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/nightly_smoke.py report \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --junit smoke-junit.xml \
+            --update-issues
