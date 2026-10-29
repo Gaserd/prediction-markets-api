@@ -5,7 +5,9 @@ from prediction_markets_api.adapters.kalshi import KalshiClient
 from prediction_markets_api.adapters.limitless import LimitlessClient
 from prediction_markets_api.adapters.pascal import PascalClient
 from prediction_markets_api.adapters.polymarket import PolymarketClient
+from prediction_markets_api.adapters.predict_fun import PredictFunClient
 from prediction_markets_api.exceptions import (
+    AuthenticationError,
     NoLiquidityError,
     NotFoundError,
     PredictionMarketsError,
@@ -31,6 +33,7 @@ __all__ = [
     "LimitlessClient",
     "HyperliquidClient",
     "PascalClient",
+    "PredictFunClient",
     "Market",
     "Outcome",
     "OrderBook",
@@ -43,5 +46,6 @@ __all__ = [
     "NotFoundError",
     "VenueAPIError",
     "RateLimitError",
+    "AuthenticationError",
     "NoLiquidityError",
 ]

@@ -1,0 +1,77 @@
+{
+  "data": {
+    "boostEndsAt": "2026-01-29T19:53:24.000Z",
+    "boostStartsAt": "2026-01-29T09:00:00.000Z",
+    "categorySlug": "who-will-trump-nominate-as-fed-chair",
+    "conditionId": "0xfbc814b46d9ebb059860c87111255d0df03a84d2412cd4b41eb4aaea5a722983",
+    "createdAt": "2025-12-05T13:33:29.767Z",
+    "decimalPrecision": 2,
+    "description": "This market will resolve according to the next individual Donald Trump, as President of the United States, formally nominates to be Chair of the Federal Reserve by December 31, 2026, 11:59 PM ET. \n\nFormal nominations are defined as the submission of a nomination message to the U.S. Senate.\n\nActing or interim appointments will not count unless the individual is formally nominated to be Chair of the Federal Reserve by submission of a nomination message to the U.S. Senate.\n\nThe primary resolution source for this market will be official information from the U.S. Senate (see: https://www.senate.gov/legislative/nominations_new.htm), however a consensus of credible reporting may also be used.",
+    "feeRateBps": 200,
+    "id": 437,
+    "imageUrl": "https://static.predict.fail/who-will-trump-nominate-as-fed-chair-david-malpass",
+    "isBoosted": true,
+    "isNegRisk": true,
+    "isVisible": true,
+    "isYieldBearing": false,
+    "kalshiMarketTicker": null,
+    "makerFeeBps": 0,
+    "marketType": null,
+    "marketVariant": "DEFAULT",
+    "oracleQuestionId": "0xc2c54c13073c7f0e2636c2459c556f21192ede2c4d9b8a280eb68b72f2316045",
+    "outcomes": [
+      {
+        "bestAsk": {
+          "price": 0.37,
+          "size": 519999.6282
+        },
+        "bestBid": {
+          "price": 0.33,
+          "size": 123154.3476
+        },
+        "indexSet": 1,
+        "name": "Definitely",
+        "onChainId": "52942861133159413416948390056898167822481351386047208865817464542237738901784",
+        "status": null,
+        "team": null,
+        "variantData": null
+      },
+      {
+        "bestAsk": {
+          "price": 0.67,
+          "size": 123154.3476
+        },
+        "bestBid": {
+          "price": 0.63,
+          "size": 519999.6282
+        },
+        "indexSet": 2,
+        "name": "Maybe",
+        "onChainId": "114777899781313736153277647439696256630388368316924294685715953438441134897814",
+        "status": null,
+        "team": null,
+        "variantData": null
+      }
+    ],
+    "polymarketConditionIds": [
+      "0x998acf9ed1bbda06d59df70786441468872c72b2de59cacbea93625b14a5efcb"
+    ],
+    "question": "Will Trump nominate David Malpass as the next Fed chair?",
+    "questionIndex": 20,
+    "resolution": null,
+    "resolverAddress": "0x52DA245ac170155391e7607c67b77D549005002d",
+    "rewards": {
+      "current": null,
+      "schedule": []
+    },
+    "shareThreshold": 100,
+    "spreadThreshold": 0.06,
+    "stats": null,
+    "status": "REGISTERED",
+    "team": null,
+    "title": "David Malpass",
+    "tradingStatus": "OPEN",
+    "variantData": null
+  },
+  "success": true
+}

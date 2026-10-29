@@ -1,0 +1,17 @@
+{
+  "recorded_at": "2026-10-29T09:34:18.930413+00:00",
+  "method": "GET",
+  "url": "https://api-testnet.predict.fun/v1/markets?first=2&status=OPEN",
+  "status": 200,
+  "request": {
+    "url": "https://api-testnet.predict.fun/v1/markets?first=2&status=OPEN",
+    "method": "GET"
+  },
+  "environment": "testnet",
+  "note": "Recorded from the public testnet because mainnet reads require PREDICTFUN_API_KEY and return HTTP 401 without it. The testnet payload uses the same read schema.",
+  "description": "Live testnet GET /v1/markets?first=2&status=OPEN",
+  "rate_limit": {
+    "limit": "240",
+    "policy": "\"rpm\";q=240;w=60"
+  }
+}

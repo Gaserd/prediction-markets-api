@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Read-only **Predict.fun** adapter (`PredictFunClient`, BNB Chain). Mainnet
+  `https://api.predict.fun` requires `PREDICTFUN_API_KEY` (`x-api-key`); the key
+  is read only from that environment variable, is not logged, and is masked as
+  `***` in `repr`. A missing mainnet key raises `AuthenticationError` before
+  the request. HTTP 401 raises the same error. Testnet
+  `https://api-testnet.predict.fun` needs no key (`base_url`). `list_markets`
+  uses `GET /v1/markets` (`first` / `after`, API cap 100). `closed=False` sends
+  `status=OPEN`, `closed=True` sends `status=RESOLVED`, `closed=None` omits
+  `status`. `get_market` uses `GET /v1/markets/{id}`. `get_order_book` /
+  `get_price` use `GET /v1/markets/{id}/orderbook` (indexSet 1 prices;
+  indexSet 2 is the complement). `get_trades` / `iter_trades` use
+  `GET /v1/orders/matches` (no JWT). Match `priceExecuted` and `amountFilled`
+  are 18-decimal wei (USDT collateral) and are scaled by `10**-18`. `price` is
+  `None` unless both `bestBid` and `bestAsk` are present. A resolved market
+  uses `1` / `0`. `decimalPrecision` is the tick (`10 ** -decimalPrecision`);
+  the book payload does not include it, so `tick_size` is unset.
+  `stats.totalLiquidityUsd` stays on `raw_data` (`Market.liquidity` is `None`).
+  Rate limit is 240 requests per minute (docs for a mainnet key; testnet sent
+  `ratelimit-limit: 240` on 2026-10-29). HTTP 429 maps to `RateLimitError`.
+  Registry `geo_restrictions` is `Restricted by venue ToS: US, UK, France,
+  Ontario, Singapore, Poland, Thailand, Australia, Belgium, Taiwan (see ToS
+  for the full list)` (https://docs.predict.fun/terms-of-service). The Terms
+  also name US-sanctioned territories and are not an exhaustive list. Trading
+  is not implemented. Fixtures were recorded from testnet on 2026-10-29 because
+  mainnet returns HTTP 401 without a key; the 401 body itself was recorded
+  from mainnet.
+
 - Read-only **Pascal** adapter (`PascalClient`, Solana, beta) on the public data API
   `https://data.pascal.trade` (no API key). `list_markets` reads `GET /api/v1/markets`
   (one unresolved snapshot; `limit` is local) and `GET /api/v1/markets/resolved`

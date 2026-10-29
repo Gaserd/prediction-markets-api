@@ -81,6 +81,15 @@ class RateLimitError(VenueAPIError):
         self.retry_after = retry_after
 
 
+class AuthenticationError(VenueAPIError):
+    """Missing or rejected API credentials.
+
+    Raised when a read requires an API key and the key is not set, or when the
+    venue rejects the key (HTTP 401). The message names the environment
+    variable to set. It does not include the key.
+    """
+
+
 class NoLiquidityError(PredictionMarketsError):
     """No liquidity available (empty order book for an existing market)."""
 

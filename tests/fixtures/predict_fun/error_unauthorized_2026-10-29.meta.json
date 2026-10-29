@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-10-29T09:34:18.930413+00:00",
+  "method": "GET",
+  "url": "https://api.predict.fun/v1/markets?first=1",
+  "status": 401,
+  "request": {
+    "url": "https://api.predict.fun/v1/markets?first=1",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "note": "Mainnet response without an API key.",
+  "description": "Live mainnet 401 when PREDICTFUN_API_KEY is not sent"
+}

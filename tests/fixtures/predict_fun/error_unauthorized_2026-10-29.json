@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "code": 401,
+  "error": "unauthorized",
+  "message": "authorization error",
+  "timestamp": "2026-10-29T09:34:23.352430246Z",
+  "trace": "8bb8662a5d4f2806f650b88d0e355b29"
+}

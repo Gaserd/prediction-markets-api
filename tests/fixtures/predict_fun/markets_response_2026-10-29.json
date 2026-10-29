@@ -1,0 +1,154 @@
+{
+  "success": true,
+  "cursor": "NDM0",
+  "data": [
+    {
+      "id": 437,
+      "imageUrl": "https://static.predict.fail/who-will-trump-nominate-as-fed-chair-david-malpass",
+      "title": "David Malpass",
+      "question": "Will Trump nominate David Malpass as the next Fed chair?",
+      "description": "This market will resolve according to the next individual Donald Trump, as President of the United States, formally nominates to be Chair of the Federal Reserve by December 31, 2026, 11:59 PM ET. \n\nFormal nominations are defined as the submission of a nomination message to the U.S. Senate.\n\nActing or interim appointments will not count unless the individual is formally nominated to be Chair of the Federal Reserve by submission of a nomination message to the U.S. Senate.\n\nThe primary resolution source for this market will be official information from the U.S. Senate (see: https://www.senate.gov/legislative/nominations_new.htm), however a consensus of credible reporting may also be used.",
+      "tradingStatus": "OPEN",
+      "status": "REGISTERED",
+      "isVisible": true,
+      "isNegRisk": true,
+      "isYieldBearing": false,
+      "feeRateBps": 200,
+      "makerFeeBps": 0,
+      "resolution": null,
+      "oracleQuestionId": "0xc2c54c13073c7f0e2636c2459c556f21192ede2c4d9b8a280eb68b72f2316045",
+      "conditionId": "0xfbc814b46d9ebb059860c87111255d0df03a84d2412cd4b41eb4aaea5a722983",
+      "resolverAddress": "0x52DA245ac170155391e7607c67b77D549005002d",
+      "outcomes": [
+        {
+          "name": "Definitely",
+          "indexSet": 1,
+          "onChainId": "52942861133159413416948390056898167822481351386047208865817464542237738901784",
+          "status": null,
+          "bestBid": {
+            "price": 0.33,
+            "size": 123154.3476
+          },
+          "bestAsk": {
+            "price": 0.37,
+            "size": 519999.6282
+          },
+          "team": null,
+          "variantData": null
+        },
+        {
+          "name": "Maybe",
+          "indexSet": 2,
+          "onChainId": "114777899781313736153277647439696256630388368316924294685715953438441134897814",
+          "status": null,
+          "bestBid": {
+            "price": 0.63,
+            "size": 519999.6282
+          },
+          "bestAsk": {
+            "price": 0.67,
+            "size": 123154.3476
+          },
+          "team": null,
+          "variantData": null
+        }
+      ],
+      "questionIndex": 20,
+      "spreadThreshold": 0.06,
+      "shareThreshold": 100,
+      "isBoosted": true,
+      "boostStartsAt": "2026-01-29T09:00:00.000Z",
+      "boostEndsAt": "2026-01-29T19:53:24.000Z",
+      "polymarketConditionIds": [
+        "0x998acf9ed1bbda06d59df70786441468872c72b2de59cacbea93625b14a5efcb"
+      ],
+      "kalshiMarketTicker": null,
+      "categorySlug": "who-will-trump-nominate-as-fed-chair",
+      "createdAt": "2025-12-05T13:33:29.767Z",
+      "decimalPrecision": 2,
+      "marketVariant": "DEFAULT",
+      "variantData": null,
+      "team": null,
+      "marketType": null,
+      "rewards": {
+        "current": null,
+        "schedule": []
+      },
+      "stats": null
+    },
+    {
+      "id": 434,
+      "imageUrl": "https://static.predict.fail/who-will-trump-nominate-as-fed-chair-christopher-waller",
+      "title": "Christopher Waller",
+      "question": "Will Trump nominate Christopher Waller as the next Fed chair?",
+      "description": "This market will resolve according to the next individual Donald Trump, as President of the United States, formally nominates to be Chair of the Federal Reserve by December 31, 2026, 11:59 PM ET. \n\nFormal nominations are defined as the submission of a nomination message to the U.S. Senate.\n\nActing or interim appointments will not count unless the individual is formally nominated to be Chair of the Federal Reserve by submission of a nomination message to the U.S. Senate.\n\nThe primary resolution source for this market will be official information from the U.S. Senate (see: https://www.senate.gov/legislative/nominations_new.htm), however a consensus of credible reporting may also be used.",
+      "tradingStatus": "OPEN",
+      "status": "REGISTERED",
+      "isVisible": true,
+      "isNegRisk": true,
+      "isYieldBearing": false,
+      "feeRateBps": 200,
+      "makerFeeBps": 0,
+      "resolution": null,
+      "oracleQuestionId": "0xb663f878b5b01a37ab1b4bcd79eb7687a560a9747be03979ae0fbc2d46de12f2",
+      "conditionId": "0x4424557383d9b25bc1aab99b145e93f1b1c1c0254b705880c0e5305eef4c4e5c",
+      "resolverAddress": "0x52DA245ac170155391e7607c67b77D549005002d",
+      "outcomes": [
+        {
+          "name": "Yes",
+          "indexSet": 1,
+          "onChainId": "50959230950309623747347706578874750072128466995261479937572739115355375658813",
+          "status": null,
+          "bestBid": {
+            "price": 0.35,
+            "size": 6.1631
+          },
+          "bestAsk": {
+            "price": 0.92,
+            "size": 96.1645
+          },
+          "team": null,
+          "variantData": null
+        },
+        {
+          "name": "No",
+          "indexSet": 2,
+          "onChainId": "45398881078970097209648428088910630576016262578834347055677271725544989809278",
+          "status": null,
+          "bestBid": {
+            "price": 0.08,
+            "size": 96.1645
+          },
+          "bestAsk": {
+            "price": 0.65,
+            "size": 6.1631
+          },
+          "team": null,
+          "variantData": null
+        }
+      ],
+      "questionIndex": 19,
+      "spreadThreshold": 0.06,
+      "shareThreshold": 100,
+      "isBoosted": true,
+      "boostStartsAt": "2026-01-29T09:00:00.000Z",
+      "boostEndsAt": "2026-01-29T19:53:24.000Z",
+      "polymarketConditionIds": [
+        "0x705371444684d676041d1010a94cae3a657340fa4809b4307de3c173a35e0957"
+      ],
+      "kalshiMarketTicker": null,
+      "categorySlug": "who-will-trump-nominate-as-fed-chair",
+      "createdAt": "2025-12-05T13:33:23.933Z",
+      "decimalPrecision": 2,
+      "marketVariant": "DEFAULT",
+      "variantData": null,
+      "team": null,
+      "marketType": null,
+      "rewards": {
+        "current": null,
+        "schedule": []
+      },
+      "stats": null
+    }
+  ]
+}

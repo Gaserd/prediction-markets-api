@@ -11,6 +11,7 @@ from prediction_markets_api import (
     KalshiClient,
     LimitlessClient,
     PolymarketClient,
+    PredictFunClient,
 )
 from prediction_markets_api.venues import VENUES, VenueStatus
 
@@ -73,6 +74,40 @@ def test_pascal_fields():
     assert venue.geo_restrictions == (
         "Restricted by venue ToS: US, UK, Russia (see ToS for the full list)"
     )
+
+
+def test_predict_fun_fields():
+    """Predict.fun is a read-only BNB Chain venue. Mainnet reads need an API key."""
+    venue = VENUES["predict_fun"]
+    assert venue.url == "https://predict.fun"
+    assert venue.chain is not None
+    assert venue.chain.value == "BNB Chain"
+    assert venue.referral_url is None
+    assert venue.supports_closed_markets is True
+    assert venue.can_read is True
+    assert venue.can_trade is False
+    assert venue.status == VenueStatus.IMPLEMENTED
+    assert venue.liquidity_source is None
+    assert venue.api_key_for_read is True
+    assert venue.geo_restrictions == (
+        "Restricted by venue ToS: US, UK, France, Ontario, Singapore, Poland, "
+        "Thailand, Australia, Belgium, Taiwan (see ToS for the full list)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_predict_fun_lists_resolved_markets():
+    """closed=True is supported and asks the venue for RESOLVED markets."""
+    client = PredictFunClient(base_url="https://api-testnet.predict.fun")
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"success": True, "cursor": None, "data": []}
+    mock_response.headers = {}
+
+    with patch.object(client._http_client, "request", new=AsyncMock(return_value=mock_response)):
+        markets = [market async for market in client.list_markets(closed=True, limit=1)]
+    assert markets == []
+    await client.close()
 
 
 def test_hyperliquid_fields():
@@ -203,7 +238,7 @@ def test_referral_links_in_readme():
     readme_table = readme_content[start_idx:end_idx].strip()
 
     # Check each venue
-    for venue_key in ["limitless", "polymarket", "kalshi", "hyperliquid"]:
+    for venue_key in ["limitless", "polymarket", "kalshi", "hyperliquid", "pascal", "predict_fun"]:
         venue = VENUES[venue_key]
 
         if venue.referral_url:
