@@ -444,8 +444,7 @@ async def main():
             print(f"{market.question}: {shown}")
 
         matches = [
-            market
-            async for market in client.list_markets(limit=1, venue_params={"query": "house"})
+            market async for market in client.list_markets(limit=1, venue_params={"query": "house"})
         ]
         if matches:
             print(matches[0].id)
