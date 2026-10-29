@@ -23,10 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (2) is `OPEN`, and only while `cutoffAt` is unset or still in the future. A
   past cutoff is `CLOSED` and `venue_status` stays `Activated`. `Created`,
   `Resolving`, `Failed`, and `Deleted` are `CLOSED`. `Resolved` (4) is
-  `RESOLVED`.   A categorical parent is `OPEN` when at least one child is still
-  tradable and the parent's own cutoff has not passed. A parent whose children
-  are all `Resolved` is `RESOLVED` (raw status stays on `venue_status`) and
-  `list_markets(closed=True)` returns it. List and get use that same rule.
+  `RESOLVED`. A categorical parent is `OPEN` when at least one child is still
+  tradable and the parent's own cutoff has not passed. The parent is
+  `RESOLVED` only when its own status is `Resolved`. A `status=resolved`
+  listing that contains only resolved children does not make the parent
+  `RESOLVED`, so `list_markets(closed=True)` does not return it. List and get
+  use that same rule.
   Categorical parent ids are `categorical-<id>` because binary and categorical
   numbers overlap; the venue number stays on `raw_data`. A bare id calls only
   `GET /openapi/market/{id}`, and `categorical-<id>` calls only

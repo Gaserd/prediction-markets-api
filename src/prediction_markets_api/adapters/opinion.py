@@ -57,14 +57,14 @@ unknown code logs one warning and leaves ``status`` unset.
 
 A categorical parent uses the same rule on both the list payload and
 ``GET /openapi/market/categorical/{id}``. Those two payloads can disagree on
-the parent status (list ``Activated``, detail ``Created``). ``Resolved`` on
-the parent stays ``RESOLVED``. A parent whose children are all ``Resolved``
-is ``RESOLVED`` as well, including when the parent's own status is still
-``Activated``, and ``list_markets(closed=True)`` returns it. ``venue_status``
-stays the raw parent status. Otherwise the parent is ``OPEN`` when at least
-one child is ``Activated`` with a cutoff that is unset or still in the future,
-and the parent's own ``cutoffAt`` is unset or still in the future. Every
-other parent is ``CLOSED``.
+the parent status (list ``Activated``, detail ``Created``). The parent is
+``RESOLVED`` only when its own status is ``Resolved``. A ``status=resolved``
+listing can omit still-open children, so a full set of ``Resolved`` children
+does not make the parent ``RESOLVED``. ``venue_status`` stays the raw parent
+status. Otherwise the parent is ``OPEN`` when at least one child is
+``Activated`` with a cutoff that is unset or still in the future, and the
+parent's own ``cutoffAt`` is unset or still in the future. Every other parent
+is ``CLOSED``.
 
 The library id of a categorical parent is ``categorical-<venue id>``. The
 venue number stays on ``raw_data['marketId']``. A colon would collide with
@@ -291,12 +291,12 @@ def _child_tradable(child: dict[str, Any]) -> bool:
 def _categorical_flags(raw: dict[str, Any]) -> tuple[MarketStatus | None, bool, str]:
     """Parent status shared by the list row and the categorical detail.
 
-    ``Resolved`` on the parent stays ``RESOLVED``. A parent whose children are
-    all ``Resolved`` is ``RESOLVED`` too, even when the parent's own status is
-    ``Activated``, so ``closed=True`` returns it. ``venue_status`` stays the
-    raw parent status. Otherwise the parent is ``OPEN`` when at least one
-    child is tradable and the parent's own ``cutoffAt`` is unset or still in
-    the future. List ``Activated`` and detail ``Created`` can differ; the
+    ``RESOLVED`` only when the parent's own status is ``Resolved``. The
+    ``status=resolved`` listing returns resolved children only, so a list of
+    ``Resolved`` children is not enough. ``venue_status`` stays the raw parent
+    status. Otherwise the parent is ``OPEN`` when at least one child is
+    tradable and the parent's own ``cutoffAt`` is unset or still in the
+    future. List ``Activated`` and detail ``Created`` can differ; the
     normalized status does not.
     """
     status, resolved, venue_status = _status(raw)
@@ -306,17 +306,10 @@ def _categorical_flags(raw: dict[str, Any]) -> tuple[MarketStatus | None, bool, 
     child_rows: list[dict[str, Any]] = []
     if isinstance(children, list):
         child_rows = [child for child in children if isinstance(child, dict)]
-    if child_rows and all(_child_is_resolved(child) for child in child_rows):
-        return MarketStatus.RESOLVED, True, venue_status
     tradable = any(_child_tradable(child) for child in child_rows)
     if tradable and not _cutoff_in_past(raw.get("cutoffAt")):
         return MarketStatus.OPEN, False, venue_status
     return MarketStatus.CLOSED, False, venue_status
-
-
-def _child_is_resolved(child: dict[str, Any]) -> bool:
-    status, resolved, _venue_status = _status(child)
-    return resolved and status == MarketStatus.RESOLVED
 
 
 def _resolved_price(

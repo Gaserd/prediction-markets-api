@@ -792,31 +792,52 @@ async def test_categorical_outcome_book_uses_the_parent_endpoint(
 
 
 @pytest.mark.asyncio
-async def test_parent_with_only_resolved_children_is_resolved(
+async def test_resolved_listing_keeps_live_parent_99_out_of_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Parent 99 stays unresolved when its own status is not Resolved.
+
+    Recorded 2026-10-29. The status=resolved listing row (page 108) and
+    GET /openapi/market/categorical/99 both include child 1800 as Activated.
+    The parent is RESOLVED only from its own status, so list_markets(closed=True)
+    does not return it.
+    """
     client = _client(monkeypatch)
-    first = _child(1, status=4, status_enum="Resolved", cutoff=1)
-    second = _child(2, status=4, status_enum="Resolved", cutoff=1)
-    first["resultTokenId"] = first["yesTokenId"]
-    second["resultTokenId"] = second["yesTokenId"]
-    listed = _parent(status=2, status_enum="Activated", cutoff=1, children=[first, second])
+    listed = _load("parent99_resolved_listing")
+    detail = _load("parent99_categorical_detail")
     with respx.mock:
         respx.get(url__regex=r".*/openapi/market(\?.*)?$").mock(
             return_value=Response(200, json=_page([listed]))
         )
+        respx.get(url__regex=r".*/openapi/market/categorical/99$").mock(
+            return_value=Response(200, json=detail)
+        )
         closed = [market async for market in client.list_markets(closed=True, limit=5)]
-        opened = [market async for market in client.list_markets(closed=False, limit=5)]
+        fetched = await client.get_market("categorical-99")
+        again = [market async for market in client.list_markets(closed=None, limit=5)]
     await client.close()
-    assert len(closed) == 1
-    assert opened == []
-    market = closed[0]
-    assert market.id == "categorical-3825"
-    assert market.raw_data["marketId"] == 3825
-    assert market.status == MarketStatus.RESOLVED
-    assert market.resolved is True
-    assert market.venue_status == "Activated"
-    assert market.winning_outcome is None
+    assert listed["marketId"] == 99
+    assert listed["statusEnum"] == "Activated"
+    assert any(
+        child["marketId"] == 1800 and child["statusEnum"] == "Activated"
+        for child in listed["childMarkets"]
+    )
+    assert detail["result"]["data"]["statusEnum"] == "Created"
+    assert any(
+        child["marketId"] == 1800 and child["statusEnum"] == "Activated"
+        for child in detail["result"]["data"]["childMarkets"]
+    )
+    assert closed == []
+    assert again[0].id == "categorical-99"
+    assert again[0].status != MarketStatus.RESOLVED
+    assert again[0].resolved is False
+    assert again[0].venue_status == "Activated"
+    assert again[0].raw_data["marketId"] == 99
+    assert fetched.id == "categorical-99"
+    assert fetched.status != MarketStatus.RESOLVED
+    assert fetched.resolved is False
+    assert fetched.venue_status == "Created"
+    assert fetched.raw_data["marketId"] == 99
 
 
 @pytest.mark.asyncio

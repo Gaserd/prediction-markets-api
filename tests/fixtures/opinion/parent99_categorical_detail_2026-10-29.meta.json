@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-29T13:55:53.554972+00:00",
+  "method": "GET",
+  "url": "https://openapi.opinion.trade/openapi/market/categorical/99",
+  "status": 200,
+  "request": {
+    "url": "https://openapi.opinion.trade/openapi/market/categorical/99",
+    "method": "GET"
+  },
+  "environment": "mainnet",
+  "description": "Live mainnet GET /openapi/market/categorical/99 (status Created, child 1800 Activated, no API key)"
+}

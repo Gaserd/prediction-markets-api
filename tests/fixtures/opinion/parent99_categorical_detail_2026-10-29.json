@@ -1,0 +1,176 @@
+{
+  "errmsg": "",
+  "errno": 0,
+  "result": {
+    "data": {
+      "chainId": "56",
+      "childMarkets": [
+        {
+          "chainId": "56",
+          "conditionId": "5db1046536e7c2393ea7dc63713e9a71c5e605a337d087a6652a9a6d654b4b91",
+          "createdAt": 1763355558,
+          "cutoffAt": 0,
+          "incentiveFactor": {},
+          "isResolvableByAI": true,
+          "marketId": 1796,
+          "marketTitle": "December 31, 2025",
+          "noLabel": "NO",
+          "noTokenId": "47524996905817590892192131936314886831829068336907782281664164128747572784513",
+          "questionId": "8064dc1d7f3d47615d2d94885d77420a39946c58d37606ef274db304092b36e7",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 1767246345,
+          "resultTokenId": "47524996905817590892192131936314886831829068336907782281664164128747572784513",
+          "rules": "",
+          "slug": "will-polymarket-launch-a-token-by-december-31-2025",
+          "status": 4,
+          "statusEnum": "Resolved",
+          "volume": "98039729.7535",
+          "yesLabel": "YES",
+          "yesTokenId": "100040931111460772847810875948465531398725866794281452860293260771355423605270"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "ba528f5cc5c541c8421649a48e9f63950f548b4d38a03349d2e2b1563ccac539",
+          "createdAt": 1763355558,
+          "cutoffAt": 0,
+          "isResolvableByAI": true,
+          "marketId": 1797,
+          "marketTitle": "March 31, 2026",
+          "noLabel": "NO",
+          "noTokenId": "45683916303751405416945120352236363070653728668506652449706774975382159931575",
+          "questionId": "0d385778efd73876a2aba6154e95d8b8a2afb4bf9bc0e2bedcc756c3da6d7867",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 1775037214,
+          "resultTokenId": "45683916303751405416945120352236363070653728668506652449706774975382159931575",
+          "rules": "",
+          "slug": "will-polymarket-launch-a-token-by-march-31-2026",
+          "status": 4,
+          "statusEnum": "Resolved",
+          "volume": "21768336.928",
+          "yesLabel": "YES",
+          "yesTokenId": "106128682162921598494644573102845096178243120430152089484367498498817745201917"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "0d6ff9cdf239bf5abe361ad0c9b9defb122f8a6ba8ec7c49495498b5db740210",
+          "createdAt": 1763355559,
+          "cutoffAt": 0,
+          "incentiveFactor": {},
+          "isResolvableByAI": true,
+          "marketId": 1798,
+          "marketTitle": "June 30, 2026",
+          "noLabel": "NO",
+          "noTokenId": "111271321434648541485619207728546978859776200530169560210556574214582359198677",
+          "questionId": "436505c5bf94ba95d744253bb74d565afa204a171b394c5efa7ba422bb26e6d3",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 1782892010,
+          "resultTokenId": "111271321434648541485619207728546978859776200530169560210556574214582359198677",
+          "rules": "",
+          "slug": "will-polymarket-launch-a-token-by-june-30-2026",
+          "status": 4,
+          "statusEnum": "Resolved",
+          "volume": "9950315.686",
+          "yesLabel": "YES",
+          "yesTokenId": "36619631655505914076686773892657171666527064214399202731686255656903042013886"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "96d6bf7cb75b49e9ea8c890e7d6a14dd4853dc4cde23222a0cefd3b4574ee410",
+          "createdAt": 1763355559,
+          "cutoffAt": 0,
+          "incentiveFactor": {},
+          "isResolvableByAI": true,
+          "marketId": 1799,
+          "marketTitle": "September 30, 2026",
+          "noLabel": "NO",
+          "noTokenId": "97965532849789217042881076616108916165971605482613431651484608808593122746818",
+          "questionId": "d67b2463153f0051ffb93f7f610ef20fa2ba0c611d27683999b3814fc7a9ddd6",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 1790943321,
+          "resultTokenId": "97965532849789217042881076616108916165971605482613431651484608808593122746818",
+          "rules": "",
+          "slug": "will-polymarket-launch-a-token-by-september-30-2026",
+          "status": 4,
+          "statusEnum": "Resolved",
+          "volume": "9413172.408",
+          "yesLabel": "YES",
+          "yesTokenId": "105683976600592022120090528468925188413301940239969220978289784594224379495642"
+        },
+        {
+          "chainId": "56",
+          "conditionId": "6bc2f9a554c14f101abfd5debfae2062ef37339cb09464073786b81142e7c124",
+          "createdAt": 1763355559,
+          "cutoffAt": 0,
+          "incentiveFactor": {},
+          "isResolvableByAI": true,
+          "marketId": 1800,
+          "marketTitle": "December 31, 2026",
+          "noLabel": "NO",
+          "noTokenId": "9820072580937846461242930927405961047693761366162725787930701295953124761035",
+          "questionId": "b566e6baf84a7b58340070da17c9e6fbe80332be908ea387f3affb99d3613b98",
+          "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+          "rebate": {
+            "maker": 0.5
+          },
+          "resolvedAt": 0,
+          "resultTokenId": "",
+          "rules": "",
+          "slug": "will-polymarket-launch-a-token-by-december-31-2026",
+          "status": 2,
+          "statusEnum": "Activated",
+          "volume": "9779696.8865",
+          "yesLabel": "YES",
+          "yesTokenId": "101388405337646979410102311528120330137536318666214797338799077086099582499567"
+        }
+      ],
+      "conditionId": "",
+      "coverUrl": "",
+      "createdAt": 1763355558,
+      "cutoffAt": 1798761600,
+      "incentiveFactor": {},
+      "isResolvableByAI": false,
+      "labelIds": [
+        100007,
+        3
+      ],
+      "labels": [
+        "Pre-TGE",
+        "Crypto"
+      ],
+      "marketId": 99,
+      "marketTitle": "Will Polymarket launch a token by...?",
+      "marketType": 1,
+      "noLabel": "",
+      "noTokenId": "",
+      "questionId": "8064dc1d7f3d47615d2d94885d77420a39946c58d37606ef274db304092b36e7",
+      "quoteToken": "0x55d398326f99059fF775485246999027B3197955",
+      "rebate": {
+        "maker": 0.5
+      },
+      "resolvedAt": 0,
+      "resultTokenId": "",
+      "rules": "This market will resolve to “Yes” if Polymarket officially launches a token on or before the specified deadline at 11:59 PM ET. Otherwise, it will resolve to “No”.\n\nThe token must be actively and publicly transferable and tradable. Announcements alone do not qualify\n\nThe primary resolution source for this market will be information from Polymarket (https://x.com/Polymarket), however a consensus of credible reporting will also be used.",
+      "slug": "will-polymarket-launch-a-token-by",
+      "status": 1,
+      "statusEnum": "Created",
+      "thumbnailUrl": "https://images.opinion.trade/0x18f63f20eead237c83ff75bb7bd2028006fef79d/0x503b9f4734a4bfa128ec083e793779f1f5257e37e5a00c5a36fbda47d2ce9317",
+      "volume": "148951251.67",
+      "volume24h": "9035.77",
+      "volume7d": "9035.77",
+      "yesLabel": "",
+      "yesTokenId": ""
+    }
+  }
+}
