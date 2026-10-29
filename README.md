@@ -116,7 +116,7 @@ All venues return data through a unified model with strict guarantees:
 
 **Price Normalization:**
 - Prices are normalized to 0..1 probability space (e.g., 0.65 = 65% probability)
-- price is None when the venue has no order book for that outcome. This is guaranteed for Hyperliquid fallback outcomes (after an `l2Book` check) and for Pascal markets when both best bid and best ask are absent. Pascal does not substitute `mark_price` in that case.
+- price is None when the venue has no order book for that outcome. An empty book is None for Hyperliquid fallback outcomes (after an `l2Book` check). A one-sided book (only a bid or only an ask) is None for Kalshi and Pascal. Pascal does not substitute `mark_price`.
 - Original venue prices preserved in `raw_price` field for reference
 - `OrderSide.BUY` means buying the outcome (get_price returns best ask)
 - `OrderSide.SELL` means selling the outcome (get_price returns best bid)
@@ -162,7 +162,7 @@ All venues return data through a unified model with strict guarantees:
 | **Hyperliquid Outcomes** | `open` | `OPEN` | False | Listed by `outcomeMeta` and the expiry is still in the future |
 | | `expired` | `CLOSED` | False | Expiry has passed but the outcome is still listed (not settled) |
 | | `settled` | `RESOLVED` | True | Loaded by id via `settledOutcome`. `settleFraction` `1` / `0` sets the winning side |
-| **Pascal** | `live` | `OPEN` | False | Unresolved market from `GET /api/v1/markets`. `price` is `None` when both best bid and best ask are absent |
+| **Pascal** | `live` | `OPEN` | False | Unresolved market from `GET /api/v1/markets`. `price` is `None` unless both best bid and best ask are present |
 | | `resolved` | `RESOLVED` | True | `resolution.price` of `1` / `0` names the long / short outcome. Listed via `GET /api/v1/markets/resolved` |
 
 **Notes:**
@@ -224,7 +224,7 @@ Be aware of venue restrictions:
 - **Polymarket**: US users blocked
 - **Kalshi**: US only (CFTC regulated)
 - **Limitless**: No restrictions (planned)
-- **Pascal**: No geo block is documented for the public read API. The product is in beta.
+- **Pascal**: US, UK, and Russia are blocked. See the Terms of Service at https://app.pascal.trade/terms.pdf. The product is in beta.
 
 ### Exception Hierarchy
 
@@ -288,7 +288,7 @@ All venues return data through a unified model:
 ### Core Types
 
 - **Market**: Question, outcomes, volume, liquidity, timestamps
-- **Outcome**: Individual tradeable token (e.g., "Yes"/"No"). price is None when the venue has no order book for that outcome. This is guaranteed for Hyperliquid fallback outcomes and for Pascal markets when both best bid and best ask are absent.
+- **Outcome**: Individual tradeable token (e.g., "Yes"/"No"). price is None when the venue has no order book for that outcome. An empty book is None for Hyperliquid fallback outcomes. A one-sided book is None for Kalshi and Pascal.
 - **OrderBook**: Sorted bids/asks, never crossed
 - **Price**: Best executable price for a side
 - **Trade**: Historical trade record
@@ -413,7 +413,7 @@ Sign-up links and referral disclosure: see [Venues & referral links](#venues--re
 | Hyperliquid Outcomes (HIP-4) | Hyperliquid | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://hyperliquid.xyz) |
 | Predict.fun | Base | 🚧 Planned | — | — | No | Yes | None | [Link](https://predict.fun) |
 | Opinion | Unknown | 🚧 Planned | — | — | No | Yes | None | [Link](https://opinion.finance) |
-| Pascal | Solana | ✅ Implemented | ✅ | — | No | Yes | None | [Link](https://app.pascal.trade) |
+| Pascal | Solana | ✅ Implemented | ✅ | — | No | Yes | US, UK, Russia blocked | [Link](https://app.pascal.trade) |
 | SX Bet | Arbitrum | 🚧 Planned | — | — | No | Yes | None | [Link](https://sx.bet) |
 | Azuro/Bookmaker.xyz | Polygon | 🚧 Planned | — | — | No | Yes | None | [Link](https://azuro.org) |
 | Jupiter Prediction | Solana | 🚧 Planned | — | — | No | Yes | None | [Link](https://jup.ag) |
@@ -427,17 +427,52 @@ Sign-up links and referral disclosure: see [Venues & referral links](#venues--re
 
 Pascal is a Solana prediction market in **beta**. The read client talks to the public data API at `https://data.pascal.trade`. Reads are unauthenticated. The web app is [app.pascal.trade](https://app.pascal.trade). The reference used here is [docs.pascal.trade/llms/api.txt](https://docs.pascal.trade/llms/api.txt). There is no public changelog; the notes below follow that document as of 2026-10-29, including the text-search and `is_mece` changes from 27–28 October 2026.
 
+### Example
+
+```python
+import asyncio
+from prediction_markets_api import PascalClient
+from prediction_markets_api.models.base import OrderSide
+
+
+async def main():
+    async with PascalClient() as client:
+        markets = [market async for market in client.list_markets(closed=False, limit=5)]
+        for market in markets:
+            price = market.outcomes[0].price
+            shown = "n/a" if price is None else f"{price:.2%}"
+            print(f"{market.question}: {shown}")
+
+        matches = [
+            market
+            async for market in client.list_markets(limit=1, venue_params={"query": "house"})
+        ]
+        if matches:
+            print(matches[0].id)
+
+        for market in markets:
+            outcome = market.outcomes[0]
+            book = await client.get_order_book(outcome.id)
+            if book.bids and book.asks:
+                buy = await client.get_price(outcome.id, OrderSide.BUY)
+                print(f"{book.bids[0].price:.4f} / {buy.price:.4f}")
+                break
+
+
+asyncio.run(main())
+```
+
 **Supported**
 
 - `list_markets` — `GET /api/v1/markets` returns every unresolved market in one snapshot, ordered by symbol. There is no cursor, so `limit` is applied locally and `page_size` is ignored. `closed=False` is that snapshot. `closed=True` is `GET /api/v1/markets/resolved` (lookback `4h`, `24h`, or `3d`, default `24h`). `order_by` is always sent (default `resolution_time`). The API accepts only `limit` 50, 100, or 200 and does not page, so this is not a full archive. `closed=None` reads the unresolved snapshot, then that resolved window.
 - Text search — `venue_params={"query": "..."}` calls `POST /api/v1/markets/text-search`. The trimmed query must be 1–32 characters; a blank or longer query raises `ValueError` before any request (the API would return `INVALID_REQUEST`). `order_by` is always sent and defaults to `volume_all_time`, which became the API default on 2026-10-27. At most 100 markets. 60 requests per minute per IP.
 - `get_market` — `POST /api/v1/markets/search` with the exact symbol, including resolved markets. An empty result is `NotFoundError`. There is no `GET /markets/{symbol}`.
 - `get_order_book` / `get_price` — `GET /api/v1/books` for one symbol (the long contract). A `:short` outcome id inverts that book. A single-symbol book may be up to one second old. Up to 50 symbols are allowed per call; this client requests one. An empty book on a listed market makes `get_price` raise `NoLiquidityError`. An unknown symbol is HTTP 422 `SYMBOL_NOT_FOUND`, mapped to `NotFoundError`.
-- `get_trades` / `iter_trades` — `GET /api/v1/trades`, paged with `before_cursor`. Each page asks for at most 500 prints. `taker_side` `BID` / `ASK` is `BUY` / `SELL` on the long contract.
+- `get_trades` / `iter_trades` — `GET /api/v1/trades`, paged with `before_cursor`. Each page asks for at most 500 prints. `taker_side` `BID` / `ASK` is `BUY` / `SELL` on the long contract. A `:short` outcome id uses price `1 - long price` and flips the side (long SELL 0.90 is short BUY 0.10). A cursor that repeats stops the iterator and logs one warning.
 
 **Prices**
 
-The long outcome price is the mid when both `best_bid` and `best_ask` exist, and the only quoted side when just one exists. When both are absent, `price` is `None` and `raw_price` is `None`. `mark_price` is not used then: it can be a last trade, including a value near 0.5, on an empty book. A resolved market uses `resolution.price` (`1` names the long outcome, `0` names the short outcome). The short outcome price is `1 - long` when the long price is set.
+The long outcome price is the mid when both `best_bid` and `best_ask` exist. When only one side exists, or neither does, `price` is `None` and `raw_price` is `None`. `mark_price` is not used: it can be a last trade, including a value near 0.5, on an empty or one-sided book. A resolved market uses `resolution.price` (`1` names the long outcome, `0` names the short outcome). The short outcome price is `1 - long` when the long price is set.
 
 **`is_mece`**
 

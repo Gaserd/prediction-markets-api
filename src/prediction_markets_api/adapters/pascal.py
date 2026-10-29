@@ -27,9 +27,10 @@ in beta and the read API has no public changelog. Endpoints used:
 - ``GET /api/v1/trades`` — public prints, paged with ``before_cursor``. Page
   size is 1–500.
 
-``price`` is ``None`` when both ``best_bid`` and ``best_ask`` are absent.
-``mark_price`` is not used in that case: it can be a last trade (including a
-value near 0.5) with an empty book. A resolved market uses ``resolution.price``.
+``price`` is ``None`` unless both ``best_bid`` and ``best_ask`` are present.
+A one-sided book is not a price, and ``mark_price`` is not a substitute: it
+can be a last trade (including a value near 0.5) with an empty book. A
+resolved market uses ``resolution.price``.
 
 ``is_mece`` (optional on market payloads since 2026-10-28) means the event's
 outcomes are mutually exclusive and collectively exhaustive. It stays on
@@ -286,9 +287,9 @@ def _book_side(raw: dict[str, Any], key: str) -> tuple[Decimal | None, str | Non
 def _long_price(raw: dict[str, Any]) -> tuple[Decimal | None, str | None]:
     """Long-contract price.
 
-    Resolution wins. Otherwise the book mid, or the only side that exists.
-    Both sides absent means there is no order book: ``price`` is ``None``.
-    ``mark_price`` is not a substitute.
+    Resolution wins. Otherwise the mid of a two-sided book. Only a bid, only
+    an ask, or neither side is ``price=None``. ``mark_price`` is not a
+    substitute.
     """
     resolution = raw.get("resolution")
     if isinstance(resolution, dict) and "price" in resolution:
@@ -296,20 +297,16 @@ def _long_price(raw: dict[str, Any]) -> tuple[Decimal | None, str | None]:
         if price is not None:
             original = resolution.get("price")
             return price, original if isinstance(original, str) else str(price)
-    bid, bid_raw = _book_side(raw, "best_bid")
-    ask, ask_raw = _book_side(raw, "best_ask")
-    if bid is not None and ask is not None:
-        mid = (bid + ask) / Decimal("2")
-        mark_raw = raw.get("mark_price")
-        mark = _decimal(mark_raw) if "mark_price" in raw else None
-        if mark is not None and mark == mid and isinstance(mark_raw, str):
-            return mid, mark_raw
-        return mid, str(mid)
-    if bid is not None:
-        return bid, bid_raw
-    if ask is not None:
-        return ask, ask_raw
-    return None, None
+    bid = _book_side(raw, "best_bid")[0]
+    ask = _book_side(raw, "best_ask")[0]
+    if bid is None or ask is None:
+        return None, None
+    mid = (bid + ask) / Decimal("2")
+    mark_raw = raw.get("mark_price")
+    mark = _decimal(mark_raw) if "mark_price" in raw else None
+    if mark is not None and mark == mid and isinstance(mark_raw, str):
+        return mid, mark_raw
+    return mid, str(mid)
 
 
 def _complement(price: Decimal | None) -> tuple[Decimal | None, str | None]:
@@ -424,7 +421,13 @@ def _invert_levels(levels: list[OrderLevel]) -> list[OrderLevel]:
     return inverted
 
 
-def _parse_trade(outcome_id: str, symbol: str, data: dict[str, Any]) -> Trade:
+def _parse_trade(
+    outcome_id: str,
+    symbol: str,
+    data: dict[str, Any],
+    *,
+    is_short: bool,
+) -> Trade:
     side_raw = data.get("taker_side")
     if side_raw == "BID":
         side = OrderSide.BUY
@@ -436,6 +439,13 @@ def _parse_trade(outcome_id: str, symbol: str, data: dict[str, Any]) -> Trade:
     size = _decimal(data.get("size"))
     if price is None or size is None or size <= 0:
         raise ValueError("trade price or size missing")
+    if is_short:
+        # The print is on the long contract. Short price is the complement
+        # and the aggressor side flips (long SELL 0.90 is short BUY 0.10).
+        price = Decimal("1") - price
+        if price < Decimal("0") or price > Decimal("1"):
+            raise ValueError("inverted trade price out of range")
+        side = OrderSide.BUY if side == OrderSide.SELL else OrderSide.SELL
     trade_id = data.get("trade_id")
     if trade_id is None:
         raise ValueError("trade id missing")
@@ -654,7 +664,8 @@ class PascalClient(BaseClient):
         ``GET /api/v1/trades`` pages with ``before_cursor``. Each request asks
         for at most the remaining trades, capped at 500. ``taker_side`` ``BID``
         is ``BUY`` and ``ASK`` is ``SELL`` on the long contract. A ``:short``
-        outcome id reads the same prints; the side is not flipped.
+        outcome id inverts each print: price is ``1 - long price`` and the
+        side is flipped.
 
         Raises:
             ValueError: If ``limit`` is not positive.
@@ -666,7 +677,11 @@ class PascalClient(BaseClient):
             yield trade
 
     async def iter_trades(self, outcome_id: str) -> AsyncIterator[Trade]:
-        """Yield every public trade the trades endpoint will page through."""
+        """Yield every public trade the trades endpoint will page through.
+
+        A cursor that has already been returned stops the iterator. One warning
+        is logged. The same prints are not requested again.
+        """
         async for trade in self._iter_trades(outcome_id, None):
             yield trade
 
@@ -839,8 +854,9 @@ class PascalClient(BaseClient):
         return parsed
 
     async def _iter_trades(self, outcome_id: str, limit: int | None) -> AsyncIterator[Trade]:
-        symbol, _is_short = _split_outcome(outcome_id)
+        symbol, is_short = _split_outcome(outcome_id)
         cursor: str | None = None
+        seen_cursors: set[str] = set()
         yielded = 0
         while True:
             if limit is not None and yielded >= limit:
@@ -852,19 +868,27 @@ class PascalClient(BaseClient):
             url = f"{self._base_url}/api/v1/trades"
             body = await self._request("GET", "/api/v1/trades", params=params)
             items, next_cursor = _trade_page(body, url)
+            if next_cursor is not None and next_cursor in seen_cursors:
+                logger.warning(
+                    "Stopping Pascal trade pagination for %s: cursor %s repeated",
+                    outcome_id,
+                    next_cursor,
+                )
+                return
             if not items:
                 return
             for item in items:
                 if limit is not None and yielded >= limit:
                     return
                 try:
-                    trade = _parse_trade(outcome_id, symbol, item)
+                    trade = _parse_trade(outcome_id, symbol, item, is_short=is_short)
                 except (KeyError, ValueError, TypeError):
                     continue
                 yield trade
                 yielded += 1
-            if not next_cursor or next_cursor == cursor:
+            if not next_cursor:
                 return
+            seen_cursors.add(next_cursor)
             cursor = next_cursor
 
     async def _request(

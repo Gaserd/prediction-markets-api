@@ -23,13 +23,13 @@ def extract_python_code_blocks(readme_path: Path) -> list[tuple[int, str]]:
     return blocks
 
 
-@pytest.mark.parametrize("block_index", list(range(7)))
+@pytest.mark.parametrize("block_index", list(range(8)))
 def test_readme_code_block_syntax(block_index):
     """Test that each README code block has valid Python syntax."""
     readme_path = Path(__file__).parent.parent / "README.md"
     blocks = extract_python_code_blocks(readme_path)
 
-    assert len(blocks) == 7, f"Expected 7 code blocks, found {len(blocks)}"
+    assert len(blocks) == 8, f"Expected 8 code blocks, found {len(blocks)}"
 
     line_num, code = blocks[block_index]
 
@@ -40,7 +40,7 @@ def test_readme_code_block_syntax(block_index):
 
 
 @pytest.mark.live
-@pytest.mark.parametrize("block_index", list(range(7)))
+@pytest.mark.parametrize("block_index", list(range(8)))
 def test_readme_code_block_executes(block_index, tmp_path):
     """Test that each README code block executes without errors (live test)."""
     readme_path = Path(__file__).parent.parent / "README.md"
@@ -70,7 +70,7 @@ def test_readme_code_block_executes(block_index, tmp_path):
         )
 
 
-@pytest.mark.parametrize("block_index", list(range(7)))
+@pytest.mark.parametrize("block_index", list(range(8)))
 def test_readme_code_block_executes_mocked(block_index, respx_mock, tmp_path):
     """Test that README code blocks execute with mocked HTTP (for CI)."""
     import json

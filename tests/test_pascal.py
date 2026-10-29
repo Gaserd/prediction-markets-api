@@ -1,6 +1,7 @@
 """Tests for the Pascal adapter using recorded API fixtures."""
 
 import json
+import logging
 from decimal import Decimal
 from pathlib import Path
 
@@ -79,14 +80,16 @@ async def test_list_markets_prices_and_empty_book() -> None:
 
     bid_only = by_id[BID_ONLY]
     assert bid_only.raw_data.get("mark_price") == "0.079000"
-    assert bid_only.outcomes[0].price == Decimal("0.004000")
-    assert bid_only.outcomes[0].raw_price == "0.004000"
-    assert bid_only.outcomes[1].price == Decimal("0.996000")
+    assert "best_ask" not in bid_only.raw_data or bid_only.raw_data.get("best_ask") is None
+    assert bid_only.outcomes[0].price is None
+    assert bid_only.outcomes[0].raw_price is None
+    assert bid_only.outcomes[1].price is None
 
     ask_only = by_id[ASK_ONLY]
     assert ask_only.raw_data.get("mark_price") == "0.007000"
-    assert ask_only.outcomes[0].price == Decimal("0.014000")
-    assert ask_only.outcomes[0].raw_price == "0.014000"
+    assert ask_only.outcomes[0].price is None
+    assert ask_only.outcomes[0].raw_price is None
+    assert ask_only.outcomes[1].price is None
 
 
 @pytest.mark.asyncio
@@ -270,6 +273,115 @@ async def test_empty_book_is_no_liquidity_unknown_symbol_is_not_found() -> None:
             respx.get(url__regex=r".*/books.*").mock(return_value=httpx.Response(422, json=missing))
             with pytest.raises(NotFoundError):
                 await client.get_order_book("DOES_NOT_EXIST.NOPE")
+
+
+@pytest.mark.asyncio
+async def test_one_sided_ask_is_not_a_price() -> None:
+    """Only an ask, including 0.999, is not a price and mark_price is ignored."""
+    payload = _load("markets_response")
+    data = payload["data"]
+    assert isinstance(data, list)
+    source = next(item for item in data if item["symbol"] == ASK_ONLY)
+    market_raw = dict(source)
+    market_raw.pop("best_bid", None)
+    market_raw["best_ask"] = "0.999000"
+    market_raw["mark_price"] = "0.500000"
+    body = {**payload, "data": [market_raw]}
+    async with PascalClient() as client:
+        with respx.mock:
+            _markets_route(body)
+            markets = [market async for market in client.list_markets(closed=False, limit=1)]
+    assert len(markets) == 1
+    long = markets[0].outcomes[0]
+    short = markets[0].outcomes[1]
+    assert long.price is None
+    assert long.raw_price is None
+    assert short.price is None
+    assert short.raw_price is None
+    assert markets[0].raw_data["best_ask"] == "0.999000"
+    assert markets[0].raw_data["mark_price"] == "0.500000"
+
+
+@pytest.mark.asyncio
+async def test_short_trades_invert_price_and_side() -> None:
+    """A :short print is the complement of the long print. The long print is unchanged."""
+    payload = _load("trades_response")
+    async with PascalClient() as client:
+        with respx.mock:
+            respx.get(url__regex=r".*/trades.*").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            short_limited = [trade async for trade in client.get_trades(f"{SYMBOL}:short", limit=1)]
+        with respx.mock:
+            respx.get(url__regex=r".*/trades.*").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            short_all = [trade async for trade in client.iter_trades(f"{SYMBOL}:short")]
+        with respx.mock:
+            respx.get(url__regex=r".*/trades.*").mock(
+                return_value=httpx.Response(200, json=payload)
+            )
+            long_limited = [trade async for trade in client.get_trades(SYMBOL, limit=1)]
+    assert len(short_limited) == 1
+    assert short_limited[0].outcome_id == f"{SYMBOL}:short"
+    assert short_limited[0].price == Decimal("0.100000")
+    assert short_limited[0].side == OrderSide.BUY
+    assert short_limited[0].size == Decimal("5")
+    assert short_limited[0].raw_data["price"] == "0.900000"
+    assert short_limited[0].raw_data["taker_side"] == "ASK"
+    assert len(short_all) == 3
+    assert short_all[0].price == Decimal("0.100000")
+    assert short_all[0].side == OrderSide.BUY
+    assert short_all[1].price == Decimal("0.090000")
+    assert short_all[1].side == OrderSide.BUY
+    assert long_limited[0].outcome_id == SYMBOL
+    assert long_limited[0].price == Decimal("0.900000")
+    assert long_limited[0].side == OrderSide.SELL
+
+
+def _trade_page(trade_id: str, price: str, cursor: str) -> dict[str, object]:
+    return {
+        "status": "success",
+        "data": {
+            "items": [
+                {
+                    "trade_id": trade_id,
+                    "symbol": SYMBOL,
+                    "taker_side": "BID",
+                    "price": price,
+                    "size": "1",
+                    "trade_ts_ms": "1792425997189",
+                }
+            ],
+            "next_cursor": cursor,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_iter_trades_stops_on_alternating_cursors(caplog: pytest.LogCaptureFixture) -> None:
+    """Cursors A -> B -> A stop after the repeat, with one warning and no raise."""
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params.get("before_cursor")
+        if cursor is None:
+            body = _trade_page("1", "0.400000", "cursor-a")
+        elif cursor == "cursor-a":
+            body = _trade_page("2", "0.410000", "cursor-b")
+        else:
+            body = _trade_page("1", "0.400000", "cursor-a")
+        return httpx.Response(200, json=body)
+
+    async with PascalClient() as client:
+        with respx.mock:
+            route = respx.get(url__regex=r".*/trades.*").mock(side_effect=respond)
+            with caplog.at_level(logging.WARNING, logger="prediction_markets_api.adapters.pascal"):
+                trades = [trade async for trade in client.iter_trades(SYMBOL)]
+    assert route.call_count == 3
+    assert [trade.id for trade in trades] == ["1", "2"]
+    warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+    assert "cursor-a" in warnings[0].getMessage()
 
 
 @pytest.mark.asyncio
