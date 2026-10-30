@@ -41,6 +41,34 @@ async def test_list_markets(markets_response, respx_mock):
 
 
 @pytest.mark.asyncio
+async def test_list_markets_follows_snake_case_cursor(markets_response, respx_mock):
+    """The Gamma keyset endpoint paginates with ``next_cursor``, not ``nextCursor``."""
+    first_page = {
+        "markets": [markets_response["markets"][0]],
+        "next_cursor": "page-2",
+    }
+    second_page = {
+        "markets": [markets_response["markets"][1]],
+        "next_cursor": None,
+    }
+    route = respx_mock.get("https://gamma-api.polymarket.com/markets/keyset").mock(
+        side_effect=[
+            httpx.Response(200, json=first_page),
+            httpx.Response(200, json=second_page),
+        ]
+    )
+
+    async with PolymarketClient() as client:
+        markets = []
+        async for market in client.list_markets():
+            markets.append(market)
+
+    assert len(markets) == 2
+    assert route.call_count == 2
+    assert route.calls[1].request.url.params["after_cursor"] == "page-2"
+
+
+@pytest.mark.asyncio
 async def test_get_market(markets_response, respx_mock):
     """Test getting a single market."""
     condition_id = "0xa467b14d51f01b957109d9cbb1d6c124fab2a089d52ed8f471d23c2812e743b7"
