@@ -159,7 +159,7 @@ class PolymarketClient(BaseClient):
                         )
                         continue
 
-            cursor = data.get("nextCursor")
+            cursor = data.get("next_cursor") or data.get("nextCursor")
             if not cursor:
                 break
 
